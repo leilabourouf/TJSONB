@@ -1443,4 +1443,4 @@ CREATE OPERATOR CLASS tstzset_hash_ops
     FUNCTION    1   set_hash(tstzset),
     FUNCTION    2   set_hash_extended(tstzset, bigint);
 
-/******************************************************************************/
+/*****************************************************************************/

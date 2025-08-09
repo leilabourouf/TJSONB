@@ -50,6 +50,7 @@
 #include <meos_internal.h>
 #include "temporal/type_parser.h"
 #include "temporal/type_util.h"
+#include "temporal/set.h"
 
 /*****************************************************************************
  * Input/output functions in string format
@@ -313,6 +314,12 @@ textset_make(const text **values, int count)
     datums[i] = PointerGetDatum(values[i]);
   return set_make_free(datums, count, T_TEXT, ORDER);
 }
+
+
+
+
+
+
 
 /**
  * @ingroup meos_setspan_constructor

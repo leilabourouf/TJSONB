@@ -39,6 +39,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 /* PostgreSQL */
+#include <postgres.h>
+/* PostGIS */
+#include <liblwgeom.h>
+#include <liblwgeom_internal.h>
+#include <stringbuffer.h>
+
 #if MEOS
 #include "postgres_int_defs.h"
 #else
@@ -307,7 +313,6 @@ typedef enum
   MEOS_ERR_WKB_OUTPUT            = 25, // WKB output error
   MEOS_ERR_GEOJSON_INPUT         = 26, // GEOJSON input error
   MEOS_ERR_GEOJSON_OUTPUT        = 27, // GEOJSON output error
-
 } errorCode;
 
 extern void meos_error(int errlevel, int errcode, const char *format, ...);
@@ -382,7 +387,6 @@ extern text *text_initcap(const text *txt);
 extern text *text_lower(const text *txt);
 extern char *text_out(const text *txt);
 extern text *text_upper(const text *txt);
-extern text *textcat_text_text(const text *txt1, const text *txt2);
 extern TimestampTz timestamptz_shift(TimestampTz t, const Interval *interv);
 extern DateADT timestamp_to_date(Timestamp t);
 extern DateADT timestamptz_to_date(TimestampTz t);
@@ -456,7 +460,6 @@ extern Set *set_copy(const Set *s);
 extern Span *span_copy(const Span *s);
 extern SpanSet *spanset_copy(const SpanSet *ss);
 extern SpanSet *spanset_make(Span *spans, int count);
-extern Set *textset_make(const text **values, int count);
 extern Set *tstzset_make(const TimestampTz *values, int count);
 extern Span *tstzspan_make(TimestampTz lower, TimestampTz upper, bool lower_inc, bool upper_inc);
 
@@ -856,6 +859,8 @@ extern bool overright_spanset_int(const SpanSet *ss, int i);
 extern bool overright_spanset_span(const SpanSet *ss, const Span *s);
 extern bool overright_spanset_spanset(const SpanSet *ss1, const SpanSet *ss2);
 extern bool overright_text_set(const text *txt, const Set *s);
+
+
 extern bool right_bigint_set(int64 i, const Set *s);
 extern bool right_bigint_span(int64 i, const Span *s);
 extern bool right_bigint_spanset(int64 i, const SpanSet *ss);
@@ -881,6 +886,8 @@ extern bool right_spanset_int(const SpanSet *ss, int i);
 extern bool right_spanset_span(const SpanSet *ss, const Span *s);
 extern bool right_spanset_spanset(const SpanSet *ss1, const SpanSet *ss2);
 extern bool right_text_set(const text *txt, const Set *s);
+
+
 
 /*****************************************************************************
  * Set functions for set and span types
@@ -1491,6 +1498,7 @@ extern int ever_lt_text_ttext(const text *txt, const Temporal *temp);
 extern int ever_lt_tfloat_float(const Temporal *temp, double d);
 extern int ever_lt_tint_int(const Temporal *temp, int i);
 extern int ever_lt_ttext_text(const Temporal *temp, const text *txt);
+
 extern int ever_ne_bool_tbool(bool b, const Temporal *temp);
 extern int ever_ne_float_tfloat(double d, const Temporal *temp);
 extern int ever_ne_int_tint(int i, const Temporal *temp);
@@ -1541,7 +1549,6 @@ extern Temporal *tlt_temporal_temporal(const Temporal *temp1, const Temporal *te
 extern Temporal *tlt_text_ttext(const text *txt, const Temporal *temp);
 extern Temporal *tlt_tfloat_float(const Temporal *temp, double d);
 extern Temporal *tlt_tint_int(const Temporal *temp, int i);
-extern Temporal *tlt_ttext_text(const Temporal *temp, const text *txt);
 extern Temporal *tne_bool_tbool(bool b, const Temporal *temp);
 extern Temporal *tne_float_tfloat(double d, const Temporal *temp);
 extern Temporal *tne_int_tint(int i, const Temporal *temp);
@@ -1761,6 +1768,12 @@ extern SkipList *tstzspan_tcount_transfn(SkipList *state, const Span *s);
 extern SkipList *tstzspanset_tcount_transfn(SkipList *state, const SpanSet *ss);
 extern SkipList *ttext_tmax_transfn(SkipList *state, const Temporal *temp);
 extern SkipList *ttext_tmin_transfn(SkipList *state, const Temporal *temp);
+
+
+
+
+
+
 
 /*****************************************************************************
  * Analytics functions for temporal types

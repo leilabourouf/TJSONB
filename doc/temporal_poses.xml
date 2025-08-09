@@ -482,7 +482,7 @@ SELECT asHexEWKB(tpose 'SRID=3812;Pose(Point(1 2),1)@2001-01-01');
 			<listitem xml:id="tposeFromText">
 				<indexterm significance="normal"><primary><varname>tposeFromText</varname></primary></indexterm>
 				<indexterm significance="normal"><primary><varname>tposeFromEWKT</varname></primary></indexterm>
-				<para>Input from the Well-Known Text (WKT) representation or from the Extended Well-Known Text (EWKT) representation</para>
+				<para>Input from the Well-Known Text (WKT) or from the Extended Well-Known Text (EWKT) representation</para>
 				<para><varname>tposeFromText(text) → tpose</varname></para>
 				<para><varname>tposeFromEWKT(text) → tpose</varname></para>
 				<programlisting language="sql" xml:space="preserve" format="linespecific">
@@ -513,7 +513,7 @@ SELECT asEWKT(tposeFromMFJSON(asMFJSON(tpose
 				<indexterm significance="normal"><primary><varname>tposeFromBinary</varname></primary></indexterm>
 				<indexterm significance="normal"><primary><varname>tposeFromEWKB</varname></primary></indexterm>
 				<indexterm significance="normal"><primary><varname>tposeFromHexEWKB</varname></primary></indexterm>
-				<para>Input from the Well-Known Binary (WKB) representation, from the Extended Well-Known Binary (EWKB) representation, or from the Hexadecimal Extended Well-Known Binary (HexEWKB) representation</para>
+				<para>Input from the Well-Known Binary (WKB), from the Extended Well-Known Binary (EWKB), or from the Hexadecimal Extended Well-Known Binary (HexEWKB) representation</para>
 				<para><varname>tposeFromBinary(bytea) → tpose</varname></para>
 				<para><varname>tposeFromEWKB(bytea) → tpose</varname></para>
 				<para><varname>tposeFromHexEWKB(text) → tpose</varname></para>
@@ -1066,7 +1066,7 @@ SELECT tpose '[Pose(Point(1 1), 0.1)@2001-01-01,
 				<indexterm significance="normal"><primary><varname>?=</varname></primary></indexterm>
 				<indexterm significance="normal"><primary><varname>%=</varname></primary></indexterm>
 				<para>Ever and always comparisons</para>
-				<para><varname>tpose {?=, %=} tpose → boolean</varname></para>
+				<para><varname>{pose,tpose} {?=, %=} {pose,tpose} → boolean</varname></para>
 				<programlisting language="sql" xml:space="preserve" format="linespecific">
 SELECT tpose '[Pose(Point(1 1), 0.2)@2001-01-01, 
   Pose(Point(1 1), 0.4)@2001-01-04)' ?= Pose(Point(1 1), 0.3);
@@ -1080,7 +1080,7 @@ SELECT tpose '[Pose(Point(1 1), 0.2)@2001-01-01,
 			<listitem xml:id="tpose_tcomp">
 				<indexterm significance="normal"><primary><varname>::</varname></primary></indexterm>
 				<para>Temporal comparisons</para>
-				<para><varname>tpose {#=, #&lt;&gt;} tpose → tbool</varname></para>
+				<para><varname>{pose,tpose} {#=, #&lt;&gt;} {pose,tpose} → tbool</varname></para>
 				<programlisting language="sql" xml:space="preserve" format="linespecific">
 SELECT tpose '[Pose(Point(1 1), 0.2)@2001-01-01, 
   Pose(Point(1 1), 0.4)@2001-01-03)' #= pose 'Pose(Point(1 1), 0.3)';

@@ -589,6 +589,9 @@ ttext_min_value(const Temporal *temp)
 
 /*****************************************************************************/
 
+
+
+
 /**
  * @ingroup meos_temporal_accessor
  * @brief Return the maximum value of a temporal integer
@@ -635,6 +638,9 @@ ttext_max_value(const Temporal *temp)
 }
 
 /*****************************************************************************/
+
+
+
 
 /**
  * @ingroup meos_temporal_accessor

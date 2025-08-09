@@ -36,6 +36,7 @@
 
 /* C */
 #include <stddef.h>
+#include <postgres.h>
 /* JSON-C */
 #include <json-c/json.h>
 /* GSL */

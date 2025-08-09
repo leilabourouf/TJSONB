@@ -297,6 +297,9 @@ left_text_set(const text *txt, const Set *s)
   return left_value_set(PointerGetDatum(txt), s);
 }
 
+
+
+
 /**
  * @ingroup meos_setspan_pos
  * @brief Return true if a date is before a set

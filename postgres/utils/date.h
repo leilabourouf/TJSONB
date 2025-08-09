@@ -16,7 +16,11 @@
 
 #include <math.h>
 
-// MEOS
+/* PostgresSQL */
+#include <postgres.h>
+#include <utils/timestamp.h>
+
+/* MEOS */
 // #include "datatype/timestamp.h"
 // #include "utils/timestamp_def.h"
 #include "../pgtime.h"
