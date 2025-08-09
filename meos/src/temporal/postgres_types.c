@@ -41,17 +41,18 @@
 #include <limits.h>
 /* PostgreSQL */
 #include <postgres.h>
+#include <common/hashfn.h>
 #include <common/int.h>
 #include <common/int128.h>
 #include <utils/datetime.h>
 #include <utils/float.h>
+#include <utils/jsonb.h>
 #if MEOS
   #include "utils/timestamp_def.h"
 #else
   #include "utils/timestamp.h"
 #endif
 #include "utils/formatting.h"
-#include <common/hashfn.h>
 #if POSTGRESQL_VERSION_NUMBER >= 160000
   #include "varatt.h"
 #endif
@@ -62,6 +63,9 @@
 #include <meos_geo.h>
 #include <meos_internal.h>
 #include "temporal/temporal.h"
+#if JSONB
+  #include "jsonb/tjsonb_funcs.h"
+#endif
 
 #if ! MEOS
   extern Datum call_function1(PGFunction func, Datum arg1);
@@ -1827,6 +1831,7 @@ interval_out(const Interval *interv)
 }
 #endif /* MEOS */
 
+
 /*****************************************************************************/
 
 #define SAMESIGN(a,b) (((a) < 0) == ((b) < 0))
@@ -2396,6 +2401,8 @@ pnstrdup(const char *in, Size size)
 }
 #endif /* MEOS */
 
+
+
 /**
  * @ingroup meos_base_types
  * @brief Return the text value transformed to lowercase
@@ -2596,4 +2603,5 @@ pg_hashtextextended(text *key, uint64 seed)
 }
 
 /*****************************************************************************/
+
 

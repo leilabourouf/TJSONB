@@ -85,6 +85,13 @@ option(CBUFFER
   OFF
   )
 
+# Option for including JSONB
+option(JSONB
+  "Set ON|OFF (default=OFF) to include JSON
+  "
+  OFF
+  )
+
 # Option for including network points
 option(NPOINT
   "Set ON|OFF (default=ON) to include network points
@@ -113,6 +120,14 @@ if(CBUFFER)
 else()
   message(STATUS "Excluding circular buffers")
   add_definitions(-DCBUFFER=0)
+endif()
+
+if(JSONB)
+  message(STATUS "Including JSONB")
+  add_definitions(-DJSONB=1)
+else()
+  message(STATUS "Excluding JSONB")
+  add_definitions(-DJSONB=0)
 endif()
 
 if(NPOINT)

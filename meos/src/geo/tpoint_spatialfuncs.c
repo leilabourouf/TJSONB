@@ -3435,7 +3435,8 @@ tpointseq_stops_iter(const TSequence *seq, double maxdist, int64 mintunits,
     if (end - start == 0)
       continue;
 
-    is_stopped = mrr_distance_geos(geom, geodetic) <= maxdist;
+    is_stopped = maxdist ? 
+      mrr_distance_geos(geom, geodetic) <= maxdist : false;
     inst2 = TSEQUENCE_INST_N(seq, end - 1);
     if (! is_stopped && previously_stopped &&
       (int64)(inst2->t - inst1->t) >= mintunits) /* Found a stop */

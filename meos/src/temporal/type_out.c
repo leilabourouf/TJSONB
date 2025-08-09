@@ -37,6 +37,8 @@
 /* PostgreSQL */
 #include <postgres.h>
 #include "utils/timestamp.h"
+#include "utils/jsonb.h"
+
 #if POSTGRESQL_VERSION_NUMBER >= 160000
   #include "varatt.h"
 #endif
@@ -58,6 +60,10 @@
 #include "geo/stbox.h"
 #if CBUFFER
   #include "cbuffer/cbuffer.h"
+#endif
+#if JSONB
+  #include <meos_jsonb.h>
+  #include "jsonb/tjsonb_funcs.h"
 #endif
 #if NPOINT
   #include "npoint/tnpoint.h"
@@ -146,6 +152,10 @@ basetype_out(Datum value, meosType type, int maxdd)
     case T_CBUFFER:
       return cbuffer_out(DatumGetCbufferP(value), maxdd);
 #endif
+#if JSONB
+    case T_JSONB:
+      return pg_jsonb_out(DatumGetJsonbP(value));
+#endif
 #if NPOINT
     case T_NPOINT:
       return npoint_out(DatumGetNpointP(value), maxdd);
@@ -207,6 +217,25 @@ text_as_mfjson_sb(stringbuffer_t *sb, const text *txt)
   pfree(str);
   return;
 }
+
+#if JSONB
+/**
+ * @brief Write into the buffer a JSONB value in the MF-JSON representation
+ */
+void 
+jsonb_as_mfjson_sb(stringbuffer_t *sb, const Jsonb *jb)
+{
+  /*
+   * JsonbToCString expects a non-const JsonbContainer*, but we know it doesn't
+   * modify the content, so we safely cast away const.
+   */
+  char *str = JsonbToCString(NULL, (JsonbContainer *) &jb->root, 1024);
+
+  /* Append raw JSON */
+  stringbuffer_append(sb, str);
+  pfree(str);
+}
+#endif /* JSONB */
 
 /**
  * @brief Write into the buffer a coordinate array in the MF-JSON
@@ -304,6 +333,11 @@ temporal_base_as_mfjson_sb(stringbuffer_t *sb, Datum value, meosType temptype,
     case T_TTEXT:
       text_as_mfjson_sb(sb, DatumGetTextP(value));
       break;
+#if JSONB
+    case T_TJSONB:
+      jsonb_as_mfjson_sb(sb, DatumGetJsonbP(value));
+      break;
+#endif
     case T_TGEOGRAPHY:
     case T_TGEOMETRY:
     {
@@ -431,6 +465,7 @@ bbox_as_mfjson_sb(stringbuffer_t *sb, meosType temptype, const bboxunion *box,
   {
     case T_TBOOL:
     case T_TTEXT:
+    case T_TJSONB:    
       tstzspan_as_mfjson_sb(sb, (Span *) box);
       break;
     case T_TINT:
@@ -474,6 +509,9 @@ temptype_as_mfjson_sb(stringbuffer_t *sb, meosType temptype)
       break;
     case T_TTEXT:
       stringbuffer_append_len(sb, "{\"type\":\"MovingText\",", 21);
+      break;
+    case T_TJSONB:  /* ← temporal-JSONB */
+      stringbuffer_append_len(sb, "{\"type\":\"MovingJsonb\",", 22);
       break;
     case T_TGEOMPOINT:
     case T_TGEOGPOINT:
@@ -892,6 +930,25 @@ cbuffer_to_wkb_size(const Cbuffer *cb, uint8_t variant, bool component)
 }
 #endif /* CBUFFER */
 
+#if JSONB
+/**
+ * @brief Return the size in bytes of a JSONB value in the Well-Known
+ * Binary (WKB) representation
+ */
+static size_t
+jsonb_to_wkb_size(const Jsonb *jb, bool component)
+{
+  size_t size = 0;
+  if (! component)
+  {
+    /* Endian flag */
+    size += MEOS_WKB_BYTE_SIZE;
+  }
+  size += MEOS_WKB_INT8_SIZE + VARSIZE_ANY_EXHDR(jb);
+  return size;
+}
+#endif /* JSONB */
+
 #if NPOINT
 /**
  * @brief Return the size in bytes of a network point in the Well-Known
@@ -964,6 +1021,10 @@ base_to_wkb_size(Datum value, meosType basetype, uint8_t variant)
     case T_CBUFFER:
       return cbuffer_to_wkb_size(DatumGetCbufferP(value), variant, true);
 #endif /* CBUFFER */
+#if JSONB
+    case T_JSONB:
+      return jsonb_to_wkb_size(DatumGetJsonbP(value), true);
+#endif /* JSONB */
 #if NPOINT
     case T_NPOINT:
       return npoint_to_wkb_size(DatumGetNpointP(value), variant, true);
@@ -1219,6 +1280,10 @@ datum_to_wkb_size(Datum value, meosType type, uint8_t variant)
   if (type == T_CBUFFER)
     return cbuffer_to_wkb_size(DatumGetCbufferP(value), variant, false);
 #endif /* CBUFFER */
+#if JSONB
+  if (type == T_JSONB)
+    return jsonb_to_wkb_size(DatumGetJsonbP(value), false);
+#endif /* JSONB */
 #if NPOINT
   if (type == T_NPOINT)
     return npoint_to_wkb_size(DatumGetNpointP(value), variant, false);
@@ -1506,6 +1571,28 @@ cbuffer_to_wkb_buf(const Cbuffer *cb, uint8_t *buf, uint8_t variant,
 }
 #endif /* CBUFFER */
 
+#if JSONB
+/**
+ * @brief Write into the buffer a JSONB value in the Well-Known Binary (WKB)
+ * representation
+ */
+static uint8_t *
+jsonb_to_wkb_buf(const Jsonb *jb, uint8_t *buf, uint8_t variant)
+{
+  /* raw JSONB payload, without the 4-byte header */
+  uint8_t *raw = (uint8_t *) VARDATA_ANY(jb);  // cast away const
+  size_t size = VARSIZE_ANY_EXHDR(jb);
+
+  /* first write the length */
+  buf = int64_to_wkb_buf((int64_t) size, buf, variant);
+
+  /* then the actual JSONB bytes */
+  buf = bytes_to_wkb_buf(raw, size, buf, variant);
+
+  return buf;
+}
+#endif /* JSONB */
+
 #if NPOINT
 /**
  * @brief Write into the buffer the flag of a network point in the Well-Known
@@ -1649,6 +1736,11 @@ base_to_wkb_buf(Datum value, meosType basetype, uint8_t *buf,
       buf = cbuffer_to_wkb_buf(DatumGetCbufferP(value), buf, variant, true);
       break;
 #endif /* CBUFFER */
+#if JSONB
+    case T_JSONB:
+      buf = jsonb_to_wkb_buf(DatumGetJsonbP(value), buf, variant);
+      break;
+#endif /* JSONB */
 #if NPOINT
     case T_NPOINT:
       buf = npoint_to_wkb_buf(DatumGetNpointP(value), buf, variant, true);
@@ -1721,6 +1813,7 @@ set_to_wkb_buf(const Set *set, uint8_t *buf, uint8_t variant)
     buf = int32_to_wkb_buf(spatialset_srid(set), buf, variant);
   /* Write the count */
   buf = int32_to_wkb_buf(set->count, buf, variant);
+  
   /* Write the values */
   for (int i = 0; i < set->count; i++)
     buf = base_to_wkb_buf(SET_VAL_N(set, i), set->basetype, buf, variant);
@@ -2209,10 +2302,13 @@ datum_to_wkb_buf(Datum value, meosType type, uint8_t *buf, uint8_t variant)
   else if (type == T_CBUFFER)
     buf = cbuffer_to_wkb_buf(DatumGetCbufferP(value), buf, variant, false);
 #endif /* CBUFFER */
+#if JSONB
+  else if (type == T_JSONB)
+    buf = jsonb_to_wkb_buf(DatumGetJsonbP(value), buf, false);
+#endif /* JSONB */
 #if NPOINT
   else if (type == T_NPOINT)
-    buf = npoint_to_wkb_buf(DatumGetNpointP(value), buf, variant,
-      false);
+    buf = npoint_to_wkb_buf(DatumGetNpointP(value), buf, variant, false);
 #endif /* NPOINT */
 #if POSE || RGEO
   else if (type == T_POSE)
@@ -2253,9 +2349,10 @@ datum_as_wkb(Datum value, meosType type, uint8_t variant, size_t *size_out)
 
   /* Initialize output size */
   if (size_out) *size_out = 0;
-
+  
   /* Calculate the required size of the output buffer */
   buf_size = datum_to_wkb_size(value, type, variant);
+
   if (buf_size == 0)
   {
     meos_error(ERROR, MEOS_ERR_WKB_OUTPUT,
@@ -2264,17 +2361,17 @@ datum_as_wkb(Datum value, meosType type, uint8_t variant, size_t *size_out)
   }
 
   /* Hex string takes twice as much space as binary + a null character */
-  if (variant & WKB_HEX)
+  if (variant & WKB_HEX) 
     buf_size = 2 * buf_size + 1;
 
   /* If neither or both variants are specified, choose the native order */
   if (! (variant & WKB_NDR || variant & WKB_XDR) ||
-    (variant & WKB_NDR && variant & WKB_XDR))
+        (variant & WKB_NDR && variant & WKB_XDR))
   {
     if (MEOS_IS_BIG_ENDIAN)
-      variant = variant | (uint8_t) WKB_XDR;
+      variant |= (uint8_t) WKB_XDR;
     else
-      variant = variant | (uint8_t) WKB_NDR;
+      variant |= (uint8_t) WKB_NDR;
   }
 
   /* Allocate the buffer */

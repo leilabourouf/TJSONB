@@ -3,6 +3,7 @@ add_library(utils OBJECT
   datetime.c
   float.c
   formatting.c
+  # numeric.c
   numutils.c
   timestamp.c
   )

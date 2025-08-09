@@ -122,6 +122,7 @@ ttextseq_in(const char *str, interpType interp)
  * timestamptz set
  * @param[in] b Value
  * @param[in] s Set
+ * @csqlfn #Tsequence_from_base_tstzset()
  */
 TSequence *
 tboolseq_from_base_tstzset(bool b, const Set *s)
@@ -137,6 +138,7 @@ tboolseq_from_base_tstzset(bool b, const Set *s)
  * timestamptz set
  * @param[in] i Value
  * @param[in] s Set
+ * @csqlfn #Tsequence_from_base_tstzset()
  */
 TSequence *
 tintseq_from_base_tstzset(int i, const Set *s)
@@ -152,6 +154,7 @@ tintseq_from_base_tstzset(int i, const Set *s)
  * timestamptz set
  * @param[in] d Value
  * @param[in] s Set
+ * @csqlfn #Tsequence_from_base_tstzset()
  */
 TSequence *
 tfloatseq_from_base_tstzset(double d, const Set *s)
@@ -167,6 +170,7 @@ tfloatseq_from_base_tstzset(double d, const Set *s)
  * timestamptz set
  * @param[in] txt Value
  * @param[in] s Set
+ * @csqlfn #Tsequence_from_base_tstzset()
  */
 TSequence *
 ttextseq_from_base_tstzset(const text *txt, const Set *s)
@@ -184,6 +188,7 @@ ttextseq_from_base_tstzset(const text *txt, const Set *s)
  * span
  * @param[in] b Value
  * @param[in] s Span
+ * @csqlfn #Tsequence_from_base_tstzspan()
  */
 TSequence *
 tboolseq_from_base_tstzspan(bool b, const Span *s)
@@ -199,6 +204,7 @@ tboolseq_from_base_tstzspan(bool b, const Span *s)
  * span
  * @param[in] i Value
  * @param[in] s Span
+ * @csqlfn #Tsequence_from_base_tstzspan()
  */
 TSequence *
 tintseq_from_base_tstzspan(int i, const Span *s)
@@ -215,6 +221,7 @@ tintseq_from_base_tstzspan(int i, const Span *s)
  * @param[in] d Value
  * @param[in] s Span
  * @param[in] interp Interpolation
+ * @csqlfn #Tsequence_from_base_tstzspan()
  */
 TSequence *
 tfloatseq_from_base_tstzspan(double d, const Span *s, interpType interp)
@@ -229,6 +236,7 @@ tfloatseq_from_base_tstzspan(double d, const Span *s, interpType interp)
  * @brief Return a temporal text sequence from a text and a timestamptz span
  * @param[in] txt Value
  * @param[in] s Span
+ * @csqlfn #Tsequence_from_base_tstzspan()
  */
 TSequence *
 ttextseq_from_base_tstzspan(const text *txt, const Span *s)

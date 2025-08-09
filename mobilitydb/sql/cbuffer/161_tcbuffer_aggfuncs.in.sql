@@ -32,6 +32,7 @@
  * @brief Aggregate functions for temporal circular buffers
  */
 
+-- The function is not STRICT
 CREATE FUNCTION tcount_transfn(internal, tcbuffer)
   RETURNS internal
   AS 'MODULE_PATHNAME', 'Temporal_tcount_transfn'
@@ -47,6 +48,7 @@ CREATE AGGREGATE tcount(tcbuffer) (
   PARALLEL = SAFE
 );
 
+-- The function is not STRICT
 CREATE FUNCTION wcount_transfn(internal, tcbuffer, interval)
   RETURNS internal
   AS 'MODULE_PATHNAME', 'Temporal_wcount_transfn'
@@ -64,10 +66,12 @@ CREATE AGGREGATE wcount(tcbuffer, interval) (
 
 /*****************************************************************************/
 
+-- The function is not STRICT
 CREATE FUNCTION temporal_merge_transfn(internal, tcbuffer)
   RETURNS internal
   AS 'MODULE_PATHNAME', 'Temporal_merge_transfn'
   LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
 CREATE FUNCTION tcbuffer_tagg_finalfn(internal)
   RETURNS tcbuffer
   AS 'MODULE_PATHNAME', 'Temporal_tagg_finalfn'
@@ -108,6 +112,7 @@ CREATE FUNCTION temporal_app_tinst_transfn(tcbuffer, tcbuffer,
   AS 'MODULE_PATHNAME', 'Temporal_app_tinst_transfn'
   LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
+-- The function is not STRICT
 CREATE FUNCTION temporal_append_finalfn(tcbuffer)
   RETURNS tcbuffer
   AS 'MODULE_PATHNAME', 'Temporal_append_finalfn'

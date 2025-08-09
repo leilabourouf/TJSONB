@@ -38,6 +38,8 @@
 
 /* PostgreSQL */
 #include <postgres.h>
+#include <utils/jsonb.h>
+
 #if MEOS
 #include "postgres_int_defs.h"
 #else
@@ -72,6 +74,68 @@
 
 #define INTERVAL_NOT_FINITE(i) (INTERVAL_IS_NOBEGIN(i) || INTERVAL_IS_NOEND(i))
 #endif /* POSTGRESQL_VERSION_NUMBER < 170000 */
+
+/* Functions adapted from numeric.c */
+
+extern Numeric numeric_in_internal(char *str, int32 typmod);
+extern char *numeric_out_internal(Numeric num);
+extern Numeric numeric_internal(Numeric num, int32 typmod);
+extern Numeric numeric_abs_internal(Numeric num);
+extern Numeric numeric_uplus_internal(Numeric num);
+extern Numeric numeric_uminus_internal(Numeric num);
+extern Numeric numeric_sign_internal(Numeric num);
+extern Numeric numeric_round_internal(Numeric num, int32 scale);
+extern Numeric numeric_trunc_internal(Numeric num, int32 scale);
+extern Numeric numeric_ceil_internal(Numeric num);
+extern Numeric numeric_floor_internal(Numeric num);
+extern int32 width_bucket_numeric_internal(Numeric operand, Numeric bound1,
+  Numeric bound2, int32 count);
+extern int numeric_cmp_internal(Numeric num1, Numeric num2);
+extern bool numeric_eq_internal(Numeric num1, Numeric num2);
+extern bool numeric_ne_internal(Numeric num1, Numeric num2);
+extern bool numeric_gt_internal(Numeric num1, Numeric num2);
+extern bool numeric_ge_internal(Numeric num1, Numeric num2);
+extern bool numeric_lt_internal(Numeric num1, Numeric num2);
+extern bool numeric_le_internal(Numeric num1, Numeric num2);
+extern bool in_range_numeric_numeric_internal(Numeric val, Numeric base,
+  Numeric offset, bool sub, bool less);
+extern int hash_numeric_internal(Numeric key);
+extern uint64 hash_numeric_extended_internal(Numeric key, uint64 seed);
+extern Numeric numeric_add_internal(Numeric num1, Numeric num2);
+extern Numeric numeric_sub_internal(Numeric num1, Numeric num2);
+extern Numeric numeric_mul_internal(Numeric num1, Numeric num2);
+extern Numeric numeric_div_internal(Numeric num1, Numeric num2);
+extern Numeric numeric_div_trunc_internal(Numeric num1, Numeric num2);
+extern Numeric numeric_mod_internal(Numeric num1, Numeric num2);
+extern Numeric numeric_inc_internal(Numeric num);
+extern Numeric numeric_smaller_internal(Numeric num1, Numeric num2);
+extern Numeric numeric_larger_internal(Numeric num1, Numeric num2);
+extern Numeric numeric_gcd_internal(Numeric num1, Numeric num2);
+extern Numeric numeric_lcm_internal(Numeric num1, Numeric num2);
+extern Numeric numeric_fac_internal(int64 num);
+extern Numeric numeric_sqrt_internal(Numeric num);
+extern Numeric numeric_exp_internal(Numeric num);
+extern Numeric numeric_ln_internal(Numeric num);
+extern Numeric numeric_log_internal(Numeric num1, Numeric num2);
+extern Numeric numeric_power_internal(Numeric num1, Numeric num2);
+extern int numeric_scale_internal(Numeric num);
+extern int numeric_min_scale_internal(Numeric num);
+extern Numeric numeric_trim_scale_internal(Numeric num);
+extern Numeric int4_numeric_internal(int32 val);
+extern int numeric_int4_internal(Numeric num);
+extern Numeric int8_numeric_internal(int64 val);
+extern int64 numeric_int8_internal(Numeric num);
+extern Numeric int2_numeric_internal(int16 val);
+extern int16 numeric_int2_internal(Numeric num);
+extern Numeric float8_numeric_internal(float8 val);
+extern double numeric_float8_internal(Numeric num);
+extern double numeric_float8_no_overflow_internal(Numeric num);
+extern Numeric float4_numeric_internal(float4 val);
+
+/* Functions adapted from varlen.c */
+
+extern text *cstring_to_text_with_len(const char *s, int len);
+extern text *cstring_to_text(const char *s);
 
 /* Functions adapted from int.c */
 
@@ -108,6 +172,9 @@ extern uint64 pg_hashint8extended(int64 val, uint64 seed);
 extern uint64 pg_hashfloat8extended(float8 key, uint64 seed);
 extern uint32 pg_hashtext(text *key);
 extern uint64 pg_hashtextextended(text *key, uint64 seed);
+
+extern Jsonb *cstring2jsonb(const char *str);
+extern char *jsonb2cstring(const Jsonb *jb);
 
 /*****************************************************************************/
 

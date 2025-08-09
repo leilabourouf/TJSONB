@@ -36,6 +36,7 @@
 
 /* C */
 #include <stdbool.h>
+#include <postgres.h>
 /* PostgreSQL */
 #ifndef int16
 typedef signed short int16;
@@ -116,9 +117,13 @@ typedef enum
   T_TGEOMETRY      = 60,  /**< temporal geometry type */
   T_TGEOGRAPHY     = 61,  /**< temporal geography type */
   T_TRGEOMETRY     = 62,  /**< temporal rigid geometry type */
+  T_JSONB          = 63,  /**< base type for PostgreSQL jsonb */
+  T_JSONPATH       = 64,  /**< base type for PostgreSQL jsonpath */
+  T_JSONBSET       = 65,  /**< static set of JSONB values */
+  T_TJSONB         = 66  /**< temporal JSONB value */
 } meosType;
 
-#define NO_MEOS_TYPES 63
+#define NO_MEOS_TYPES 67
 
 /**
  * Enumeration that defines the classes of Boolean operators used in
