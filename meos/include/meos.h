@@ -38,7 +38,19 @@
 /* C */
 #include <stdbool.h>
 #include <stdint.h>
+#include <postgres.h>
+
+
+
 /* PostgreSQL */
+#include <utils/jsonb.h>
+/* PostGIS */
+#include <liblwgeom.h>
+#include <liblwgeom_internal.h>
+#include <stringbuffer.h>
+
+
+
 #if MEOS
 #include "postgres_int_defs.h"
 #else
@@ -307,7 +319,6 @@ typedef enum
   MEOS_ERR_WKB_OUTPUT            = 25, // WKB output error
   MEOS_ERR_GEOJSON_INPUT         = 26, // GEOJSON input error
   MEOS_ERR_GEOJSON_OUTPUT        = 27, // GEOJSON output error
-
 } errorCode;
 
 extern void meos_error(int errlevel, int errcode, const char *format, ...);
@@ -382,7 +393,14 @@ extern text *text_initcap(const text *txt);
 extern text *text_lower(const text *txt);
 extern char *text_out(const text *txt);
 extern text *text_upper(const text *txt);
-extern text *textcat_text_text(const text *txt1, const text *txt2);
+//jsnb
+extern int jsonb_cmp(const Jsonb *jb1, const Jsonb *jb2);
+extern Jsonb *jsonb_copy(const Jsonb *jb);
+extern char *meos_jsonb_out(const Jsonb *jb);
+extern Jsonb *cstring2jsonb(const char *str);
+extern char  *jsonb2cstring(const Jsonb *jb);
+
+
 extern TimestampTz timestamptz_shift(TimestampTz t, const Interval *interv);
 extern DateADT timestamp_to_date(Timestamp t);
 extern DateADT timestamptz_to_date(TimestampTz t);
@@ -431,14 +449,20 @@ extern char *spanset_as_hexwkb(const SpanSet *ss, uint8_t variant, size_t *size_
 extern uint8_t *spanset_as_wkb(const SpanSet *ss, uint8_t variant, size_t *size_out);
 extern SpanSet *spanset_from_hexwkb(const char *hexwkb);
 extern SpanSet *spanset_from_wkb(const uint8_t *wkb, size_t size);
+
 extern Set *textset_in(const char *str);
 extern char *textset_out(const Set *set);
+
+//JSNB
+extern Set * jsonbset_in(const char *str);
+extern char * jsonbset_out(const Set *set);
 extern Set *tstzset_in(const char *str);
 extern char *tstzset_out(const Set *set);
 extern Span *tstzspan_in(const char *str);
 extern char *tstzspan_out(const Span *s);
 extern SpanSet *tstzspanset_in(const char *str);
 extern char *tstzspanset_out(const SpanSet *ss);
+
 
 /*****************************************************************************
  * Constructor functions for set and span types
@@ -456,7 +480,6 @@ extern Set *set_copy(const Set *s);
 extern Span *span_copy(const Span *s);
 extern SpanSet *spanset_copy(const SpanSet *ss);
 extern SpanSet *spanset_make(Span *spans, int count);
-extern Set *textset_make(const text **values, int count);
 extern Set *tstzset_make(const TimestampTz *values, int count);
 extern Span *tstzspan_make(TimestampTz lower, TimestampTz upper, bool lower_inc, bool upper_inc);
 
@@ -489,6 +512,9 @@ extern Span *set_to_span(const Set *s);
 extern SpanSet *set_to_spanset(const Set *s);
 extern SpanSet *span_to_spanset(const Span *s);
 extern Set *text_to_set(const text *txt);
+//JSNB
+extern Set * jsonb_to_set(const Jsonb *jsonb);
+
 extern Set *timestamptz_to_set(TimestampTz t);
 extern Span *timestamptz_to_span(TimestampTz t);
 extern SpanSet *timestamptz_to_spanset(TimestampTz t);
@@ -564,6 +590,14 @@ extern text *textset_end_value(const Set *s);
 extern text *textset_start_value(const Set *s);
 extern bool textset_value_n(const Set *s, int n, text **result);
 extern text **textset_values(const Set *s);
+
+//jsnb
+extern Jsonb * jsonbset_start_value(const Set *s);
+extern Jsonb * jsonbset_end_value(const Set *s);
+extern bool jsonbset_value_n(const Set *s, int n, Jsonb **result);
+extern Jsonb ** jsonbset_values(const Set *s);
+
+
 extern TimestampTz tstzset_end_value(const Set *s);
 extern TimestampTz tstzset_start_value(const Set *s);
 extern bool tstzset_value_n(const Set *s, int n, TimestampTz *result);
@@ -618,6 +652,11 @@ extern Set *textcat_textset_text(const Set *s, const text *txt);
 extern Set *textset_initcap(const Set *s);
 extern Set *textset_lower(const Set *s);
 extern Set *textset_upper(const Set *s);
+
+//JSNB
+extern Set * jsonbcat_jsonb_jsonbset(const Jsonb *jb, const Set *s);
+extern Set * jsonbcat_jsonbset_jsonb(const Set *s, const Jsonb *jb);
+
 extern TimestampTz timestamptz_tprecision(TimestampTz t, const Interval *duration, TimestampTz torigin);
 extern Set *tstzset_shift_scale(const Set *s, const Interval *shift, const Interval *duration);
 extern Set *tstzset_tprecision(const Set *s, const Interval *duration, TimestampTz torigin);
@@ -699,6 +738,8 @@ extern bool contained_span_spanset(const Span *s, const SpanSet *ss);
 extern bool contained_spanset_span(const SpanSet *ss, const Span *s);
 extern bool contained_spanset_spanset(const SpanSet *ss1, const SpanSet *ss2);
 extern bool contained_text_set(const text *txt, const Set *s);
+//JSNB
+extern bool contained_jsonb_set(const Jsonb *jsonb, const Set *s);
 extern bool contained_timestamptz_set(TimestampTz t, const Set *s);
 extern bool contained_timestamptz_span(TimestampTz t, const Span *s);
 extern bool contained_timestamptz_spanset(TimestampTz t, const SpanSet *ss);
@@ -708,6 +749,8 @@ extern bool contains_set_float(const Set *s, double d);
 extern bool contains_set_int(const Set *s, int i);
 extern bool contains_set_set(const Set *s1, const Set *s2);
 extern bool contains_set_text(const Set *s, text *t);
+//JSNB
+extern bool contains_set_jsonb(const Set *s,  Jsonb *jsonb);
 extern bool contains_set_timestamptz(const Set *s, TimestampTz t);
 extern bool contains_span_bigint(const Span *s, int64 i);
 extern bool contains_span_date(const Span *s, DateADT d);
@@ -856,6 +899,8 @@ extern bool overright_spanset_int(const SpanSet *ss, int i);
 extern bool overright_spanset_span(const SpanSet *ss, const Span *s);
 extern bool overright_spanset_spanset(const SpanSet *ss1, const SpanSet *ss2);
 extern bool overright_text_set(const text *txt, const Set *s);
+
+
 extern bool right_bigint_set(int64 i, const Set *s);
 extern bool right_bigint_span(int64 i, const Span *s);
 extern bool right_bigint_spanset(int64 i, const SpanSet *ss);
@@ -882,6 +927,8 @@ extern bool right_spanset_span(const SpanSet *ss, const Span *s);
 extern bool right_spanset_spanset(const SpanSet *ss1, const SpanSet *ss2);
 extern bool right_text_set(const text *txt, const Set *s);
 
+
+
 /*****************************************************************************
  * Set functions for set and span types
  *****************************************************************************/
@@ -896,6 +943,8 @@ extern Set *intersection_set_float(const Set *s, double d);
 extern Set *intersection_set_int(const Set *s, int i);
 extern Set *intersection_set_set(const Set *s1, const Set *s2);
 extern Set *intersection_set_text(const Set *s, const text *txt);
+//JSNB
+extern Set * intersection_jsonb_set(const Jsonb *jb, const Set *s);
 extern Set *intersection_set_timestamptz(const Set *s, TimestampTz t);
 extern Span *intersection_span_bigint(const Span *s, int64 i);
 extern Span *intersection_span_date(const Span *s, DateADT d);
@@ -912,6 +961,8 @@ extern SpanSet *intersection_spanset_span(const SpanSet *ss, const Span *s);
 extern SpanSet *intersection_spanset_spanset(const SpanSet *ss1, const SpanSet *ss2);
 extern SpanSet *intersection_spanset_timestamptz(const SpanSet *ss, TimestampTz t);
 extern Set *intersection_text_set(const text *txt, const Set *s);
+//JSNB
+extern Set * intersection_set_jsonb(const Set *s, const Jsonb *jb);
 extern Set *intersection_timestamptz_set(TimestampTz t, const Set *s);
 extern Set *minus_bigint_set(int64 i, const Set *s);
 extern SpanSet *minus_bigint_span(int64 i, const Span *s);
@@ -931,6 +982,8 @@ extern Set *minus_set_float(const Set *s, double d);
 extern Set *minus_set_int(const Set *s, int i);
 extern Set *minus_set_set(const Set *s1, const Set *s2);
 extern Set *minus_set_text(const Set *s, const text *txt);
+//JSNB
+extern Set * minus_set_jsonb(const Set *s, const Jsonb *jb);
 extern Set *minus_set_timestamptz(const Set *s, TimestampTz t);
 extern SpanSet *minus_span_bigint(const Span *s, int64 i);
 extern SpanSet *minus_span_date(const Span *s, DateADT d);
@@ -947,6 +1000,9 @@ extern SpanSet *minus_spanset_span(const SpanSet *ss, const Span *s);
 extern SpanSet *minus_spanset_spanset(const SpanSet *ss1, const SpanSet *ss2);
 extern SpanSet *minus_spanset_timestamptz(const SpanSet *ss, TimestampTz t);
 extern Set *minus_text_set(const text *txt, const Set *s);
+
+//JSNB
+extern Set * minus_jsonb_set(const Jsonb *jb, const Set *s);
 extern Set *minus_timestamptz_set(TimestampTz t, const Set *s);
 extern SpanSet *minus_timestamptz_span(TimestampTz t, const Span *s);
 extern SpanSet *minus_timestamptz_spanset(TimestampTz t, const SpanSet *ss);
@@ -968,6 +1024,8 @@ extern Set *union_set_float(const Set *s, double d);
 extern Set *union_set_int(const Set *s, int i);
 extern Set *union_set_set(const Set *s1, const Set *s2);
 extern Set *union_set_text(const Set *s, const text *txt);
+//JSNB
+extern Set * union_set_jsonb(const Set *s, const Jsonb *jb);
 extern Set *union_set_timestamptz(const Set *s, TimestampTz t);
 extern SpanSet *union_span_bigint(const Span *s, int64 i);
 extern SpanSet *union_span_date(const Span *s, DateADT d);
@@ -984,6 +1042,8 @@ extern SpanSet *union_spanset_span(const SpanSet *ss, const Span *s);
 extern SpanSet *union_spanset_spanset(const SpanSet *ss1, const SpanSet *ss2);
 extern SpanSet *union_spanset_timestamptz(const SpanSet *ss, TimestampTz t);
 extern Set *union_text_set(const text *txt, const Set *s);
+//JSNB
+extern Set *union_jsonb_set(const Jsonb *jb, const Set *s);
 extern Set *union_timestamptz_set(TimestampTz t, const Set *s);
 extern SpanSet *union_timestamptz_span(TimestampTz t, const Span *s);
 extern SpanSet *union_timestamptz_spanset(TimestampTz t, SpanSet *ss);
@@ -1049,6 +1109,8 @@ extern Span *spanset_extent_transfn(Span *state, const SpanSet *ss);
 extern SpanSet *spanset_union_finalfn(SpanSet *state);
 extern SpanSet *spanset_union_transfn(SpanSet *state, const SpanSet *ss);
 extern Set *text_union_transfn(Set *state, const text *txt);
+//JSNB
+extern Set * jsonb_union_transfn(Set *state, const Jsonb *jsonb);
 extern Span *timestamptz_extent_transfn(Span *state, TimestampTz t);
 extern Set *timestamptz_union_transfn(Set *state, TimestampTz t);
 
@@ -1215,6 +1277,13 @@ extern Temporal *ttext_from_mfjson(const char *str);
 extern Temporal *ttext_in(const char *str);
 extern char *ttext_out(const Temporal *temp);
 
+//JSNB 
+extern Temporal * tjsonb_from_mfjson(const char *str);
+extern void jsonb_as_mfjson_sb(stringbuffer_t *sb, const Jsonb *jb);
+extern Temporal * tjsonb_in(const char *str);
+extern char * tjsonb_out(const Temporal *temp);
+
+
 /*****************************************************************************
  * Constructor functions for temporal types
  *****************************************************************************/
@@ -1243,6 +1312,15 @@ extern TInstant *ttextinst_make(const text *txt, TimestampTz t);
 extern TSequence *ttextseq_from_base_tstzset(const text *txt, const Set *s);
 extern TSequence *ttextseq_from_base_tstzspan(const text *txt, const Span *s);
 extern TSequenceSet *ttextseqset_from_base_tstzspanset(const text *txt, const SpanSet *ss);
+
+//JSNB
+
+extern Temporal * tjsonb_from_base_temp(const Jsonb *jsonb, const Temporal *temp);
+extern TInstant * tjsonbinst_make(const Jsonb *jsonb, TimestampTz t);
+extern TSequence * tjsonbseq_from_base_tstzset(const Jsonb *jsonb, const Set *s);
+extern TSequence * tjsonbseq_from_base_tstzspan(const Jsonb *jsonb, const Span *s);
+extern TSequenceSet * tjsonbseqset_from_base_tstzspanset(const Jsonb *jsonb, const SpanSet *ss);
+
 
 /*****************************************************************************
  * Conversion functions for temporal types
@@ -1317,6 +1395,15 @@ extern bool ttext_value_at_timestamptz(const Temporal *temp, TimestampTz t, bool
 extern bool ttext_value_n(const Temporal *temp, int n, text **result);
 extern text **ttext_values(const Temporal *temp, int *count);
 
+
+//JSNB
+extern Jsonb * tjsonb_end_value(const Temporal *temp);
+extern Jsonb * tjsonb_start_value(const Temporal *temp);
+extern bool tjsonb_value_at_timestamptz(const Temporal *temp, TimestampTz t, bool strict,  Jsonb **value);
+extern bool tjsonb_value_n(const Temporal *temp,   int n, Jsonb **result);
+extern Jsonb ** tjsonb_values(const Temporal *temp,  int *count);
+
+
 /*****************************************************************************
  * Transformation functions for temporal types
  *****************************************************************************/
@@ -1390,6 +1477,12 @@ extern Temporal *tnumber_minus_tbox(const Temporal *temp, const TBox *box);
 extern Temporal *ttext_at_value(const Temporal *temp, text *txt);
 extern Temporal *ttext_minus_value(const Temporal *temp, text *txt);
 
+//JSNB
+extern Temporal * tjsonb_at_value(const Temporal *temp, Jsonb *jsb);
+extern Temporal * tjsonb_minus_value(const Temporal *temp,  Jsonb *jsb);
+
+
+
 /*****************************************************************************
  * Comparison functions for temporal types
  *****************************************************************************/
@@ -1417,13 +1510,18 @@ extern int always_eq_text_ttext(const text *txt, const Temporal *temp);
 extern int always_eq_tfloat_float(const Temporal *temp, double d);
 extern int always_eq_tint_int(const Temporal *temp, int i);
 extern int always_eq_ttext_text(const Temporal *temp, const text *txt);
+//JSNB
+extern int always_eq_tjsonb_jsonb(const Temporal *temp, const Jsonb *jsonb);
 extern int always_ge_float_tfloat(double d, const Temporal *temp);
 extern int always_ge_int_tint(int i, const Temporal *temp);
 extern int always_ge_temporal_temporal(const Temporal *temp1, const Temporal *temp2);
 extern int always_ge_text_ttext(const text *txt, const Temporal *temp);
+//JSNB
+extern int always_eq_jsonb_tjsonb(const Jsonb *jsonb, const Temporal *temp);
 extern int always_ge_tfloat_float(const Temporal *temp, double d);
 extern int always_ge_tint_int(const Temporal *temp, int i);
 extern int always_ge_ttext_text(const Temporal *temp, const text *txt);
+//JSNB
 extern int always_gt_float_tfloat(double d, const Temporal *temp);
 extern int always_gt_int_tint(int i, const Temporal *temp);
 extern int always_gt_temporal_temporal(const Temporal *temp1, const Temporal *temp2);
@@ -1445,24 +1543,36 @@ extern int always_lt_text_ttext(const text *txt, const Temporal *temp);
 extern int always_lt_tfloat_float(const Temporal *temp, double d);
 extern int always_lt_tint_int(const Temporal *temp, int i);
 extern int always_lt_ttext_text(const Temporal *temp, const text *txt);
+
+
 extern int always_ne_bool_tbool(bool b, const Temporal *temp);
 extern int always_ne_float_tfloat(double d, const Temporal *temp);
 extern int always_ne_int_tint(int i, const Temporal *temp);
 extern int always_ne_tbool_bool(const Temporal *temp, bool b);
 extern int always_ne_temporal_temporal(const Temporal *temp1, const Temporal *temp2);
 extern int always_ne_text_ttext(const text *txt, const Temporal *temp);
+//JSNB
+extern int always_ne_jsonb_tjsonb(const Jsonb *jsonb, const Temporal *temp);
 extern int always_ne_tfloat_float(const Temporal *temp, double d);
 extern int always_ne_tint_int(const Temporal *temp, int i);
 extern int always_ne_ttext_text(const Temporal *temp, const text *txt);
+//JSNB
+extern int always_ne_tjsonb_jsonb(const Temporal *temp, const Jsonb *jsonb);
 extern int ever_eq_bool_tbool(bool b, const Temporal *temp);
 extern int ever_eq_float_tfloat(double d, const Temporal *temp);
 extern int ever_eq_int_tint(int i, const Temporal *temp);
 extern int ever_eq_tbool_bool(const Temporal *temp, bool b);
 extern int ever_eq_temporal_temporal(const Temporal *temp1, const Temporal *temp2);
 extern int ever_eq_text_ttext(const text *txt, const Temporal *temp);
+//JSNB
+extern int ever_eq_jsonb_tjsonb(const Jsonb *jsonb, const Temporal *temp);
+
 extern int ever_eq_tfloat_float(const Temporal *temp, double d);
 extern int ever_eq_tint_int(const Temporal *temp, int i);
 extern int ever_eq_ttext_text(const Temporal *temp, const text *txt);
+//JSNB
+extern int ever_eq_tjsonb_jsonb(const Temporal *temp, const Jsonb *jsonb);
+
 extern int ever_ge_float_tfloat(double d, const Temporal *temp);
 extern int ever_ge_int_tint(int i, const Temporal *temp);
 extern int ever_ge_temporal_temporal(const Temporal *temp1, const Temporal *temp2);
@@ -1491,15 +1601,21 @@ extern int ever_lt_text_ttext(const text *txt, const Temporal *temp);
 extern int ever_lt_tfloat_float(const Temporal *temp, double d);
 extern int ever_lt_tint_int(const Temporal *temp, int i);
 extern int ever_lt_ttext_text(const Temporal *temp, const text *txt);
+
 extern int ever_ne_bool_tbool(bool b, const Temporal *temp);
 extern int ever_ne_float_tfloat(double d, const Temporal *temp);
 extern int ever_ne_int_tint(int i, const Temporal *temp);
 extern int ever_ne_tbool_bool(const Temporal *temp, bool b);
 extern int ever_ne_temporal_temporal(const Temporal *temp1, const Temporal *temp2);
 extern int ever_ne_text_ttext(const text *txt, const Temporal *temp);
+//JSNB
+extern int ever_ne_jsonb_tjsonb(const Jsonb *jsonb, const Temporal *temp);
 extern int ever_ne_tfloat_float(const Temporal *temp, double d);
 extern int ever_ne_tint_int(const Temporal *temp, int i);
 extern int ever_ne_ttext_text(const Temporal *temp, const text *txt);
+//JSNB
+extern int ever_ne_tjsonb_jsonb(const Temporal *temp, const Jsonb *jsonb);
+
 
 /*****************************************************************************/
 
@@ -1511,9 +1627,13 @@ extern Temporal *teq_int_tint(int i, const Temporal *temp);
 extern Temporal *teq_tbool_bool(const Temporal *temp, bool b);
 extern Temporal *teq_temporal_temporal(const Temporal *temp1, const Temporal *temp2);
 extern Temporal *teq_text_ttext(const text *txt, const Temporal *temp);
+//JSNB
+extern Temporal *teq_jsonb_tjsonb(const Jsonb *jsonb, const Temporal *temp);
 extern Temporal *teq_tfloat_float(const Temporal *temp, double d);
 extern Temporal *teq_tint_int(const Temporal *temp, int i);
 extern Temporal *teq_ttext_text(const Temporal *temp, const text *txt);
+//JSNB
+extern Temporal *teq_tjsonb_jsonb(const Temporal *temp, const Jsonb *jsonb);
 extern Temporal *tge_float_tfloat(double d, const Temporal *temp);
 extern Temporal *tge_int_tint(int i, const Temporal *temp);
 extern Temporal *tge_temporal_temporal(const Temporal *temp1, const Temporal *temp2);
@@ -1541,16 +1661,21 @@ extern Temporal *tlt_temporal_temporal(const Temporal *temp1, const Temporal *te
 extern Temporal *tlt_text_ttext(const text *txt, const Temporal *temp);
 extern Temporal *tlt_tfloat_float(const Temporal *temp, double d);
 extern Temporal *tlt_tint_int(const Temporal *temp, int i);
-extern Temporal *tlt_ttext_text(const Temporal *temp, const text *txt);
 extern Temporal *tne_bool_tbool(bool b, const Temporal *temp);
 extern Temporal *tne_float_tfloat(double d, const Temporal *temp);
 extern Temporal *tne_int_tint(int i, const Temporal *temp);
 extern Temporal *tne_tbool_bool(const Temporal *temp, bool b);
 extern Temporal *tne_temporal_temporal(const Temporal *temp1, const Temporal *temp2);
 extern Temporal *tne_text_ttext(const text *txt, const Temporal *temp);
+//JSNB
+extern Temporal *tne_jsonb_tjsonb(const Jsonb *jsonb, const Temporal *temp);
 extern Temporal *tne_tfloat_float(const Temporal *temp, double d);
 extern Temporal *tne_tint_int(const Temporal *temp, int i);
 extern Temporal *tne_ttext_text(const Temporal *temp, const text *txt);
+//JSNB
+extern Temporal *tne_tjsonb_jsonb(const Temporal *temp, const Jsonb *jsonb);
+
+
 
 /*****************************************************************************
  * Bounding box functions for temporal types
@@ -1715,6 +1840,19 @@ extern Temporal *ttext_upper(const Temporal *temp);
 extern Temporal *ttext_lower(const Temporal *temp);
 
 /*****************************************************************************
+ * JSONB functions for temporal types
+ *****************************************************************************/
+
+//JSNB
+extern Jsonb * jsonb_concat_jsonb(const Jsonb *jb1, const Jsonb *jb2); 
+extern Temporal * jsonb_concat_jsonb_tjsonb(const Jsonb *jb, const Temporal *temp);
+extern Temporal * jsonb_concat_tjsonb_jsonb(const Temporal *temp, const Jsonb *jb);
+extern Temporal * jsonb_concat_tjsonb_tjsonb(const Temporal *temp1, const Temporal *temp2);
+extern Temporal * jsonb_set_tjsonb_jsonb(const Temporal *temp, const Jsonb *jb);
+extern Temporal * jsonb_set_jsonb_tjsonb(const Jsonb *value, const Temporal *temp); 
+
+
+/*****************************************************************************
  * Distance functions for temporal types
  *****************************************************************************/
 
@@ -1761,6 +1899,12 @@ extern SkipList *tstzspan_tcount_transfn(SkipList *state, const Span *s);
 extern SkipList *tstzspanset_tcount_transfn(SkipList *state, const SpanSet *ss);
 extern SkipList *ttext_tmax_transfn(SkipList *state, const Temporal *temp);
 extern SkipList *ttext_tmin_transfn(SkipList *state, const Temporal *temp);
+
+
+
+
+
+
 
 /*****************************************************************************
  * Analytics functions for temporal types
