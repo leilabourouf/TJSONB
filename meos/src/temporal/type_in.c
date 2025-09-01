@@ -174,15 +174,6 @@ basetype_in(const char *str, meosType type,
       *result = PointerGetDatum(txt);
       return true;
     }
-    case T_JSONB:
-    {
-      Jsonb *jb = cstring2jsonb(str);
-      if (! jb)
-        return false;
-      *result = PointerGetDatum(jb);
-      return true;
-    }
-
     case T_GEOMETRY:
     {
       GSERIALIZED *gs = geom_in(str, -1);
@@ -206,6 +197,16 @@ basetype_in(const char *str, meosType type,
       if (! cb)
         return false;
       *result = PointerGetDatum(cb);
+      return true;
+    }
+#endif
+#if JSONB
+    case T_JSONB:
+    {
+      Jsonb *jb = cstring2jsonb(str);
+      if (! jb)
+        return false;
+      *result = PointerGetDatum(jb);
       return true;
     }
 #endif
@@ -398,6 +399,7 @@ parse_mfjson_values(json_object *mfjson, meosType temptype, int *count)
         }
         values[i] = PointerGetDatum(cstring2text(json_object_get_string(jvalue)));
         break;
+#if JSONB
       case T_TJSONB:
       {
         /* Accept any JSON value for temporal‐JSONB */
@@ -411,8 +413,8 @@ parse_mfjson_values(json_object *mfjson, meosType temptype, int *count)
         }
         values[i] = PointerGetDatum(jb);
         break;
-}
-   
+      }
+#endif /* JSONB */
       default: /* Error! */
         meos_error(ERROR, MEOS_ERR_MFJSON_INPUT,
           "Unknown temporal type in MFJSON string: %s",
@@ -982,8 +984,11 @@ ensure_temptype_mfjson(const char *typestr)
       strcmp(typestr, "MovingPoint") != 0 &&
       strcmp(typestr, "MovingGeometry") != 0  &&
       strcmp(typestr, "MovingPose") != 0 &&
-      strcmp(typestr, "MovingRigidGeometry") != 0 &&
-      strcmp(typestr, "MovingJSONB") != 0 )
+      strcmp(typestr, "MovingRigidGeometry") != 0
+#if JSONB
+      && strcmp(typestr, "MovingJSONB") != 0 
+#endif /* JSONB */
+     )
   {
     meos_error(ERROR, MEOS_ERR_MFJSON_INPUT,
       "Invalid 'type' value in MFJSON string: %s", typestr);
@@ -1049,8 +1054,10 @@ temporal_from_mfjson(const char *mfjson, meosType temptype)
     jtemptype = T_TFLOAT;
   else if (strcmp(typestr, "MovingText") == 0)
     jtemptype = T_TTEXT;
+#if JSONB
   else if (strcmp(typestr, "MovingJSONB") == 0)
     jtemptype = T_TJSONB;
+#endif /* JSONB */
   else if (strcmp(typestr, "MovingPoint") == 0)
   {
     if (temptype == T_TGEOGPOINT)
@@ -1388,6 +1395,7 @@ text_from_wkb_state(meos_wkb_parse_state *s)
   return result;
 }
 
+#if JSONB
 /**
  * @brief Read a JSONB value and advance the parse state forward
  */
@@ -1413,8 +1421,7 @@ jsonb_from_wkb_state(meos_wkb_parse_state *s)
 
   return jb;
 }
-
-
+#endif /* JSONB */
 
 /*****************************************************************************/
 
@@ -1667,15 +1674,17 @@ base_from_wkb_state(meos_wkb_parse_state *s)
       return TimestampTzGetDatum(timestamp_from_wkb_state(s));
     case T_TEXT:
       return PointerGetDatum(text_from_wkb_state(s));
-    case T_JSONB:
-      return PointerGetDatum(jsonb_from_wkb_state(s));
     case T_GEOMETRY:
     case T_GEOGRAPHY:
       return PointerGetDatum(geo_from_wkb_state(s));
 #if CBUFFER
     case T_CBUFFER:
       return PointerGetDatum(cbuffer_from_wkb_state(s, true));
-#endif /* NPOINT */
+#endif /* CBUFFER */
+#if JSONB
+    case T_JSONB:
+      return PointerGetDatum(jsonb_from_wkb_state(s));
+#endif /* JSONB */
 #if NPOINT
     case T_NPOINT:
       return PointerGetDatum(npoint_from_wkb_state(s));

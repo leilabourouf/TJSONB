@@ -36,6 +36,7 @@
 #include <assert.h>
 /* PostgreSQL */
 #include <postgres.h>
+#include <utils/jsonb.h>
 #include <utils/timestamp.h>
 #if POSTGRESQL_VERSION_NUMBER >= 160000
   #include "varatt.h"
@@ -368,9 +369,7 @@ text_union_transfn(Set *state, const text *txt)
   return value_union_transfn(state, PointerGetDatum(txt), T_TEXT);
 }
 
-/*****************************************************************************/
-
-//jsnb
+#if JSONB
 /**
  * @ingroup meos_setspan_agg
  * @brief Transition function for set union aggregate of JSONB values
@@ -387,4 +386,6 @@ jsonb_union_transfn(Set *state, const Jsonb *jb)
   /* Reuse the generic value‐union function, passing T_JSONB */
   return value_union_transfn(state, PointerGetDatum(jb), T_JSONB);
 }
-//JSNB
+#endif /* JSONB */
+
+/*****************************************************************************/

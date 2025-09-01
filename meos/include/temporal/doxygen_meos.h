@@ -103,7 +103,11 @@
  *
  * @defgroup meos_cbuffer Functions for temporal circular buffers
  * @ingroup meos_api
- * @brief Functions for temporal temporal circular buffers
+ * @brief Functions for temporal circular buffers
+ *
+ * @defgroup meos_jsonb Functions for temporal JSONB
+ * @ingroup meos_api
+ * @brief Functions for temporal JSONB
  *
  * @defgroup meos_npoint Functions for temporal network points
  * @ingroup meos_api
@@ -308,10 +312,6 @@
  * @defgroup meos_temporal_text Text functions
  * @ingroup meos_temporal
  * @brief Text functions for temporal types
-*
- * @defgroup meos_temporal_jsonb Jsonb functions
- * @ingroup meos_temporal
- * @brief Jsonb functions for temporal types
  *
  * @defgroup meos_temporal_dist Distance functions
  * @ingroup meos_temporal

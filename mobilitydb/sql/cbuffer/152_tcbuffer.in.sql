@@ -55,11 +55,6 @@ CREATE FUNCTION temporal_send(tcbuffer)
   AS 'MODULE_PATHNAME', 'Temporal_send'
   LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE FUNCTION tcbuffer_typmod_in(cstring[])
-  RETURNS integer
-  AS 'MODULE_PATHNAME', 'Tcbuffer_typmod_in'
-  LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
-
 CREATE TYPE tcbuffer (
   internallength = variable,
   input = tcbuffer_in,
@@ -72,6 +67,11 @@ CREATE TYPE tcbuffer (
   alignment = double,
   analyze = tspatial_analyze
 );
+
+CREATE FUNCTION tcbuffer_typmod_in(cstring[])
+  RETURNS integer
+  AS 'MODULE_PATHNAME', 'Tgeompoint_typmod_in'
+  LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 -- Special cast for enforcing the typmod restrictions
 CREATE FUNCTION tcbuffer(tcbuffer, integer)
@@ -535,7 +535,7 @@ CREATE FUNCTION unnest(tcbuffer)
   LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 /*****************************************************************************
- * Stop Function
+ * Stops Function
  *****************************************************************************/
 
 CREATE FUNCTION stops(tcbuffer, maxdist float DEFAULT 0.0,

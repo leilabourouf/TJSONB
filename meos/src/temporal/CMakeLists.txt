@@ -32,7 +32,6 @@ set(TEMPORAL_SRCS
   tsequence.c
   tsequenceset.c
   ttext_funcs.c
-  tjsonb_funcs.c
   type_in.c
   type_out.c
   type_parser.c

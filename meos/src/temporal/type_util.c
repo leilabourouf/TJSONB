@@ -42,7 +42,7 @@
 #include <postgres.h>
 #include <utils/float.h>
 #include <utils/timestamp.h>
-#include "utils/jsonb.h"
+#include <utils/jsonb.h>
 #if POSTGRESQL_VERSION_NUMBER >= 160000
   #include "varatt.h"
 #endif
@@ -71,14 +71,6 @@
 #if RGEO
   #include "rgeo/trgeo.h"
 #endif
-
-
-//extern Datum jsonb_eq(PG_FUNCTION_ARGS);
-extern Datum jsonb_hash(PG_FUNCTION_ARGS);
-extern Datum jsonb_hash_extended(PG_FUNCTION_ARGS);
-
-
-
 
 /*****************************************************************************
  * Comparison functions on datums
@@ -135,10 +127,10 @@ datum_cmp(Datum l, Datum r, meosType type)
       return float8_cmp_internal(DatumGetFloat8(l), DatumGetFloat8(r));
     case T_TEXT:
       return text_cmp(DatumGetTextP(l), DatumGetTextP(r));
+#if JSONB
     case T_JSONB:
-      /* compare two JSONB values */
-      return jsonb_cmp(DatumGetJsonbP(l), DatumGetJsonbP(r));
-
+      return jsonb_cmp_internal(DatumGetJsonbP(l), DatumGetJsonbP(r));
+#endif
     case T_GEOMETRY:
     case T_GEOGRAPHY:
       return gserialized_cmp(DatumGetGserializedP(l), DatumGetGserializedP(r));
@@ -220,23 +212,6 @@ datum_eq(Datum l, Datum r, meosType type)
       return float8_eq(DatumGetFloat8(l), DatumGetFloat8(r));
     case T_TEXT:
       return text_cmp(DatumGetTextP(l), DatumGetTextP(r)) == 0;
-    case T_JSONB:
-    {
-      const Jsonb *jb1 = DatumGetJsonbP(l);
-      const Jsonb *jb2 = DatumGetJsonbP(r);
-
-      char *str1 = jsonb2cstring(jb1);
-      char *str2 = jsonb2cstring(jb2);
-
-      bool equal = compareJsonbContainers(
-                    (JsonbContainer *) &jb1->root,
-                    (JsonbContainer *) &jb2->root) == 0;
-
-  
-
-      return equal;
-    }
-
     case T_DOUBLE2:
       return double2_eq(DatumGetDouble2P(l), DatumGetDouble2P(r));
     case T_DOUBLE3:
@@ -258,6 +233,16 @@ datum_eq(Datum l, Datum r, meosType type)
 #if CBUFFER
     case T_CBUFFER:
       return cbuffer_eq(DatumGetCbufferP(l), DatumGetCbufferP(r));
+#endif
+#if JSONB
+    case T_JSONB:
+    {
+      const Jsonb *jb1 = DatumGetJsonbP(l);
+      const Jsonb *jb2 = DatumGetJsonbP(r);
+      bool equal = compareJsonbContainers((JsonbContainer *) &jb1->root,
+        (JsonbContainer *) &jb2->root) == 0;
+      return equal;
+    }
 #endif
 #if NPOINT
     case T_NPOINT:
@@ -470,19 +455,16 @@ datum_hash(Datum d, meosType type)
       return pg_hashfloat8(DatumGetFloat8(d));
     case T_TEXT:
       return pg_hashtext(DatumGetTextP(d));
-    case T_JSONB:
-      /* use Postgres’s built-in jsonb hash */
-      return DatumGetUInt32(
-        DirectFunctionCall1(jsonb_hash,
-          PointerGetDatum(DatumGetJsonbP(d)))
-      );
-
     case T_GEOMETRY:
     case T_GEOGRAPHY:
       return gserialized_hash(DatumGetGserializedP(d));
 #if CBUFFER
     case T_CBUFFER:
       return cbuffer_hash(DatumGetCbufferP(d));
+#endif
+#if JSONB
+    case T_JSONB:
+      return pg_jsonb_hash(DatumGetJsonbP(d));
 #endif
 #if NPOINT
     case T_NPOINT:
@@ -526,22 +508,14 @@ datum_hash_extended(Datum d, meosType type, uint64 seed)
       return pg_hashfloat8extended(DatumGetFloat8(d), seed);
     case T_TEXT:
       return pg_hashtextextended(DatumGetTextP(d), seed);
-  case T_JSONB:
-  {
-    Jsonb *jb = DatumGetJsonbP(d);  // <-- define jb here
-
-    /* extended hash for jsonb, using the supplied seed */
-    return DatumGetUInt64(
-      DirectFunctionCall2(jsonb_hash_extended,
-                          PointerGetDatum(jb),
-                          Int64GetDatum(seed))
-    );
-  }
-
     // PostGIS currently does not provide an extended hash function
     // case T_GEOMETRY:
     // case T_GEOGRAPHY:
       // return gserialized_hash_extended(DatumGetGserializedP(d), seed);
+#if JSONB
+    case T_JSONB:
+      return pg_jsonb_hash_extended(DatumGetJsonbP(d), seed);
+#endif
 #if NPOINT
     case T_NPOINT:
       return npoint_hash_extended(DatumGetNpointP(d), seed);

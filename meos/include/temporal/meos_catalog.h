@@ -119,8 +119,8 @@ typedef enum
   T_TGEOGRAPHY     = 61,  /**< temporal geography type */
   T_TRGEOMETRY     = 62,  /**< temporal rigid geometry type */
   T_JSONB          = 63,  /**< base type for PostgreSQL jsonb */
-  T_JSONBSET       = 64,  /**< static set of JSONB values (“tags” or symbols) */
-  T_TJSONB         = 65  /**< temporal JSONB value (pointwise trajectory) */
+  T_JSONBSET       = 64,  /**< static set of JSONB values */
+  T_TJSONB         = 65  /**< temporal JSONB value */
 } meosType;
 
 #define NO_MEOS_TYPES 66

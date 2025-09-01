@@ -53,11 +53,11 @@
 #include <meos_internal_geo.h>
 #include "temporal/span.h"
 #include "temporal/ttext_funcs.h"
-#include "temporal/tjsonb_funcs.h"
 #include "temporal/type_parser.h"
 #include "temporal/type_util.h"
 #include "geo/tgeo_spatialfuncs.h"
 #include "geo/tspatial_boxops.h"
+#include "jsonb/tjsonb_funcs.h"
 
 /*****************************************************************************
  * Parameter tests
@@ -352,6 +352,7 @@ set_make_exp(const Datum *values, int count, int maxcount, meosType basetype,
   /* Sort the values and remove duplicates */
   Datum *newvalues;
   int newcount;
+#if JSONB
   if (basetype == T_JSONB)
   {
     /* Do not sort or deduplicate for jsonbset — preserve order */
@@ -359,7 +360,9 @@ set_make_exp(const Datum *values, int count, int maxcount, meosType basetype,
     memcpy(newvalues, values, sizeof(Datum) * count);
     newcount = count;
   }
-  else if (order && count > 1)
+  else
+#endif /* JSONB */
+  if (order && count > 1)
   {
     newvalues = palloc(sizeof(Datum) * count);
     memcpy(newvalues, values, sizeof(Datum) * count);
@@ -918,11 +921,6 @@ textcat_textset_text_int(const Set *s, const text *txt, bool invert)
       datum_textcat(SET_VAL_N(s, i), PointerGetDatum(txt));
   return set_make_free(values, s->count, T_TEXT, ORDER_NO);
 }
-
-
-//jsnb
-
-//jsnb
 
 /*****************************************************************************/
 

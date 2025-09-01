@@ -110,9 +110,12 @@ extern uint64 pg_hashint8extended(int64 val, uint64 seed);
 extern uint64 pg_hashfloat8extended(float8 key, uint64 seed);
 extern uint32 pg_hashtext(text *key);
 extern uint64 pg_hashtextextended(text *key, uint64 seed);
-//JSNB
-extern uint32 pg_hashjsonb(Jsonb *key);
-extern uint64 pg_hashjsonb_extended (Jsonb *key, uint64 seed);
+extern uint32 pg_jsonb_hash(Jsonb *key);
+extern uint64 pg_jsonb_hash_extended (Jsonb *key, uint64 seed);
+
+extern Jsonb *cstring2jsonb(const char *str);
+extern char *jsonb2cstring(const Jsonb *jb);
+
 /*****************************************************************************/
 
 #endif /* POSTGRES_TYPES_H */

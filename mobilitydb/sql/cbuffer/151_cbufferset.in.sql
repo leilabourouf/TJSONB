@@ -46,6 +46,7 @@ CREATE FUNCTION cbufferset_out(cbufferset)
   RETURNS cstring
   AS 'MODULE_PATHNAME', 'Set_out'
   LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
 CREATE FUNCTION cbufferset_recv(internal)
   RETURNS cbufferset
   AS 'MODULE_PATHNAME', 'Set_recv'

@@ -107,6 +107,7 @@ text_out(const text *txt)
   return result;
 }
 
+#if JSONB
 /**
  * @ingroup meos_base_types
  * @brief Return the unquoted string representation of a jsonb value
@@ -116,12 +117,9 @@ char *
 meos_jsonb_out(const Jsonb *jb)
 {
   assert(jb);
-  return jsonb2cstring(jb);  // ✅ Pas de guillemets autour
+  return jsonb2cstring(jb);
 }
-
-
-
-
+#endif /* JSONB */
 
 /**
  * @brief Return the string representation of a base value
@@ -148,10 +146,6 @@ basetype_out(Datum value, meosType type, int maxdd)
       return float8_out(DatumGetFloat8(value), maxdd);
     case T_TEXT:
       return text_out(DatumGetTextP(value));
-    case T_JSONB:
-      return meos_jsonb_out(DatumGetJsonbP(value));
-
-
 #if DEBUG_BUILD
     case T_DOUBLE2:
       return double2_out(DatumGetDouble2P(value), maxdd);
@@ -167,6 +161,10 @@ basetype_out(Datum value, meosType type, int maxdd)
 #if CBUFFER
     case T_CBUFFER:
       return cbuffer_out(DatumGetCbufferP(value), maxdd);
+#endif
+#if JSONB
+    case T_JSONB:
+      return meos_jsonb_out(DatumGetJsonbP(value));
 #endif
 #if NPOINT
     case T_NPOINT:
@@ -230,7 +228,7 @@ text_as_mfjson_sb(stringbuffer_t *sb, const text *txt)
   return;
 }
 
-//jsnb
+#if JSONB
 /**
  * @brief Write into the buffer a JSONB value in the MF-JSON representation
  */
@@ -247,9 +245,8 @@ jsonb_as_mfjson_sb(stringbuffer_t *sb, const Jsonb *jb)
   stringbuffer_append(sb, str);
   pfree(str);
 }
+#endif /* JSONB */
 
-
-//jsnb
 /**
  * @brief Write into the buffer a coordinate array in the MF-JSON
  * representation
@@ -346,10 +343,11 @@ temporal_base_as_mfjson_sb(stringbuffer_t *sb, Datum value, meosType temptype,
     case T_TTEXT:
       text_as_mfjson_sb(sb, DatumGetTextP(value));
       break;
+#if JSONB
     case T_TJSONB:
       jsonb_as_mfjson_sb(sb, DatumGetJsonbP(value));
       break;
-
+#endif
     case T_TGEOGRAPHY:
     case T_TGEOMETRY:
     {
@@ -1533,8 +1531,7 @@ text_to_wkb_buf(const text *txt, uint8_t *buf, uint8_t variant)
   return buf;
 }
 
-//jsnb
-
+#if JSONB
 /**
  * @brief Write into the buffer a JSONB value in the Well-Known Binary (WKB)
  * representation
@@ -1554,8 +1551,7 @@ jsonb_to_wkb_buf(const Jsonb *jb, uint8_t *buf, uint8_t variant)
 
   return buf;
 }
-
-//jsnb
+#endif /* JSONB */
 
 /**
  * @brief Write into the buffer a geo value in the Well-Known Binary (WKB)
@@ -1736,22 +1732,6 @@ base_to_wkb_buf(Datum value, meosType basetype, uint8_t *buf,
     case T_TEXT:
       buf = text_to_wkb_buf(DatumGetTextP(value), buf, variant);
       break;
-case T_JSONB:
-{
-  Jsonb *jb = DatumGetJsonbP(value);
-  /* Delegate to the native-binary helper */
-  return jsonb_to_wkb_buf(jb, buf, variant);
-}
-
-
-
-
-
-
-
-
-        
-
     case T_GEOMETRY:
     case T_GEOGRAPHY:
       buf = geo_to_wkb_buf(DatumGetGserializedP(value), buf, variant);
@@ -1761,6 +1741,11 @@ case T_JSONB:
       buf = cbuffer_to_wkb_buf(DatumGetCbufferP(value), buf, variant, true);
       break;
 #endif /* CBUFFER */
+#if JSONB
+    case T_JSONB:
+      buf = jsonb_to_wkb_buf(DatumGetJsonbP(value), buf, variant);
+      break;
+#endif /* JSONB */
 #if NPOINT
     case T_NPOINT:
       buf = npoint_to_wkb_buf(DatumGetNpointP(value), buf, variant, true);
@@ -2380,18 +2365,15 @@ datum_as_wkb(Datum value, meosType type, uint8_t variant, size_t *size_out)
   /* Hex string takes twice as much space as binary + a null character */
   if (variant & WKB_HEX) 
     buf_size = 2 * buf_size + 1;
-  
-    
 
   /* If neither or both variants are specified, choose the native order */
   if (! (variant & WKB_NDR || variant & WKB_XDR) ||
-      (variant & WKB_NDR && variant & WKB_XDR))
+        (variant & WKB_NDR && variant & WKB_XDR))
   {
     if (MEOS_IS_BIG_ENDIAN)
       variant |= (uint8_t) WKB_XDR;
     else
       variant |= (uint8_t) WKB_NDR;
-  
   }
 
   /* Allocate the buffer */
@@ -2402,7 +2384,6 @@ datum_as_wkb(Datum value, meosType type, uint8_t variant, size_t *size_out)
       UINT64_FORMAT " bytes for WKB output buffer.", buf_size);
     return NULL;
   }
-
 
   /* Retain a pointer to the front of the buffer for later */
   wkb_out = buf;
@@ -2416,9 +2397,6 @@ datum_as_wkb(Datum value, meosType type, uint8_t variant, size_t *size_out)
     *buf = '\0';
     buf++;
   }
-  /* 🔍 Log expected vs actual size BEFORE the check */
-  size_t actual_written = (size_t)(buf - wkb_out);
-  
 
   /* The buffer pointer should now land at the end of the allocated buffer space. Let's check. */
   if (buf_size != (size_t) (buf - wkb_out))

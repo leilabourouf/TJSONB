@@ -107,24 +107,6 @@ contains_set_text(const Set *s, text *txt)
   return contains_set_value(s, PointerGetDatum(txt));
 }
 
-//jsnb
-/**
- * @ingroup meos_setspan_topo
- * @brief Return true if a JSONB set contains a JSONB value
- * @param[in] s Set of JSONB values
- * @param[in] jsonb JSONB value
- * @csqlfn #Contains_set_value()
- */
-bool
-contains_set_jsonb(const Set *s, Jsonb *jsonb)
-{
-  /* Ensure the validity of the arguments */
-  VALIDATE_JSONBSET(s, false);
-  VALIDATE_NOT_NULL(jsonb, false);
-  return contains_set_value(s, PointerGetDatum(jsonb));
-}
-//jsnb
-
 /**
  * @ingroup meos_setspan_topo
  * @brief Return true if a set contains a date
@@ -219,24 +201,6 @@ contained_text_set(const text *txt, const Set *s)
   VALIDATE_TEXTSET(s, false); VALIDATE_NOT_NULL(txt, false);
   return contained_value_set(PointerGetDatum(txt), s);
 }
-;
-//jsnb
-/**
- * @ingroup meos_setspan_topo
- * @brief Return true if a JSONB value is contained in a set
- * @param[in] s Set of JSONB values
- * @param[in] jb JSONB value
- * @csqlfn #Contained_value_set()
- */
-bool
-contained_jsonb_set(const Jsonb *jb, const Set *s)
-{
-  /* Ensure the validity of the arguments */
-  VALIDATE_JSONBSET(s, false);
-  VALIDATE_NOT_NULL(jb, false);
-  return contained_value_set(PointerGetDatum(jb), s);
-}
-//jsnb
 
 /**
  * @ingroup meos_setspan_topo
@@ -1086,24 +1050,6 @@ union_set_text(const Set *s, const text *txt)
   return union_set_value(s, PointerGetDatum(txt));
 }
 
-//jsnb
-/**
- * @ingroup meos_setspan_set
- * @brief Return the union of a JSONB set and a JSONB value
- * @param[in] s JSONB set
- * @param[in] jb JSONB value
- * @csqlfn #Union_set_value()
- */
-Set *
-union_set_jsonb(const Set *s, const Jsonb *jb)
-{
-  /* Ensure the validity of the arguments */
-  VALIDATE_JSONBSET(s, NULL);
-  VALIDATE_NOT_NULL(jb, NULL);
-  return union_set_value(s, PointerGetDatum(jb));
-}
-//jsnb
-
 /**
  * @ingroup meos_setspan_set
  * @brief Return the union of a set and a date
@@ -1188,21 +1134,6 @@ union_text_set(const text *txt, const Set *s)
 {
   return union_set_text(s, txt);
 }
-
-//jsnb
-/**
- * @ingroup meos_setspan_set
- * @brief Return the union of a JSONB value and a JSONB set
- * @param[in] jb JSONB value
- * @param[in] s  JSONB set
- */
-inline Set *
-union_jsonb_set(const Jsonb *jb, const Set *s)
-{
-  return union_set_jsonb(s, jb);
-}
-//jsnb
-
 
 /**
  * @ingroup meos_setspan_set
@@ -1294,25 +1225,6 @@ intersection_set_text(const Set *s, const text *txt)
   return intersection_set_value(s, PointerGetDatum(txt));
 }
 
-//jsnb
-/**
- * @ingroup meos_setspan_set
- * @brief Return the intersection of a JSONB set and a JSONB value
- * @param[in] s   JSONB set
- * @param[in] jb  JSONB value
- * @csqlfn #Intersection_set_value()
- */
-Set *
-intersection_set_jsonb(const Set *s, const Jsonb *jb)
-{
-  /* Ensure the validity of the arguments */
-  VALIDATE_JSONBSET(s, NULL);
-  VALIDATE_NOT_NULL(jb, NULL);
-  return intersection_set_value(s, PointerGetDatum(jb));
-}
-
-//jsnb
-
 /**
  * @ingroup meos_setspan_set
  * @brief Return the intersection of a set and a date
@@ -1396,21 +1308,6 @@ intersection_text_set(const text *txt, const Set *s)
 {
   return intersection_set_text(s, txt);
 }
-
-
-//jsnb
-/**
- * @ingroup meos_setspan_set
- * @brief Return the intersection of a JSONB value and a JSONB set
- * @param[in] jb  JSONB value
- * @param[in] s   JSONB set
- */
-inline Set *
-intersection_jsonb_set(const Jsonb *jb, const Set *s)
-{
-  return intersection_set_jsonb(s, jb);
-}
-//jsnb
 
 /**
  * @ingroup meos_setspan_set
@@ -1503,23 +1400,6 @@ minus_text_set(const text *txt, const Set *s)
   return minus_value_set(PointerGetDatum(txt), s);
 }
 
-//jsnb
-/**
- * @ingroup meos_setspan_set
- * @brief Return the difference of a JSONB value and a JSONB set
- * @param[in] jb JSONB value
- * @param[in] s JSONB set
- * @csqlfn #Minus_value_set()
- */
-Set *
-minus_jsonb_set(const Jsonb *jb, const Set *s)
-{
-  /* Ensure the validity of the arguments */
-  VALIDATE_JSONBSET(s, NULL);
-  VALIDATE_NOT_NULL(jb, NULL);
-  return minus_value_set(PointerGetDatum(jb), s);
-}
-//jsnb
 /**
  * @ingroup meos_setspan_set
  * @brief Return the difference of a date and a set
@@ -1612,25 +1492,6 @@ minus_set_text(const Set *s, const text *txt)
   VALIDATE_TEXTSET(s, NULL); VALIDATE_NOT_NULL(txt, NULL);
   return minus_set_value(s, PointerGetDatum(txt));
 }
-
-//jsnb
-/**
- * @ingroup meos_setspan_set
- * @brief Return the difference of a JSONB set and a JSONB value
- * @param[in] s JSONB set
- * @param[in] jb JSONB value
- * @csqlfn #Minus_set_value()
- */
-Set *
-minus_set_jsonb(const Set *s, const Jsonb *jb)
-{
-  /* Ensure the validity of the arguments */
-  VALIDATE_JSONBSET(s, NULL);
-  VALIDATE_NOT_NULL(jb, NULL);
-  return minus_set_value(s, PointerGetDatum(jb));
-}
-//jsnb
-
 
 /**
  * @ingroup meos_setspan_set
