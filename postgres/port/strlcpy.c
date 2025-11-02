@@ -34,6 +34,11 @@
 
 #include "c.h"
 
+#ifdef __APPLE__
+#undef strlcpy
+#undef strlcat
+#endif()
+
 
 /*
  * Copy src to string dst of size siz.  At most siz-1 characters

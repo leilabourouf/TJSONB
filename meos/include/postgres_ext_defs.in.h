@@ -9,12 +9,20 @@ typedef uintptr_t Datum;
 typedef signed char int8;
 typedef signed short int16;
 typedef signed int int32;
+#ifdef __APPLE__
+typedef int64_t int64;
+#else
 typedef long int int64;
+#endif
 
 typedef unsigned char uint8;
 typedef unsigned short uint16;
 typedef unsigned int uint32;
+#ifdef __APPLE__
+typedef uint64_t uint64;
+#else
 typedef unsigned long int uint64;
+#endif
 
 typedef int32 DateADT;
 typedef int64 TimeADT;

@@ -448,11 +448,11 @@ extern char *mkdtemp(char *path);
 extern int	inet_aton(const char *cp, struct in_addr *addr);
 #endif
 
-#if !HAVE_DECL_STRLCAT
+#if !(defined(__APPLE__) || HAVE_DECL_STRLCAT)
 extern size_t strlcat(char *dst, const char *src, size_t siz);
 #endif
 
-#if !HAVE_DECL_STRLCPY
+#if !(defined(__APPLE__) || HAVE_DECL_STRLCPY)
 extern size_t strlcpy(char *dst, const char *src, size_t siz);
 #endif
 
