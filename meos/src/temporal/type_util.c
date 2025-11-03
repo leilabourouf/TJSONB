@@ -40,6 +40,7 @@
 #include <postgres.h>
 #include <utils/float.h>
 #include <utils/timestamp.h>
+#include <utils/jsonb.h>
 #if POSTGRESQL_VERSION_NUMBER >= 160000
   #include "varatt.h"
 #endif
@@ -51,9 +52,14 @@
 #include "temporal/span.h"
 #include "temporal/type_util.h"
 #include "geo/tgeo_spatialfuncs.h"
+
 #if CBUFFER
   #include <meos_cbuffer.h>
   #include "cbuffer/cbuffer.h"
+#endif
+#if JSONB
+  #include <meos_jsonb.h>
+  #include "jsonb/tjsonb_funcs.h"
 #endif
 #if NPOINT
   // #include <meos_npoint.h>
@@ -131,6 +137,10 @@ datum_cmp(Datum l, Datum r, meosType type)
 #if CBUFFER
     case T_CBUFFER:
       return cbuffer_cmp(DatumGetCbufferP(l), DatumGetCbufferP(r));
+#endif
+#if JSONB
+    case T_JSONB:
+      return jsonb_cmp_internal(DatumGetJsonbP(l), DatumGetJsonbP(r));
 #endif
 #if NPOINT
     case T_NPOINT:
@@ -227,6 +237,10 @@ datum_eq(Datum l, Datum r, meosType type)
 #if CBUFFER
     case T_CBUFFER:
       return cbuffer_eq(DatumGetCbufferP(l), DatumGetCbufferP(r));
+#endif
+#if JSONB
+    case T_JSONB:
+      return jsonb_eq_internal(DatumGetJsonbP(l), DatumGetJsonbP(r));
 #endif
 #if NPOINT
     case T_NPOINT:
@@ -446,6 +460,10 @@ datum_hash(Datum d, meosType type)
     case T_CBUFFER:
       return cbuffer_hash(DatumGetCbufferP(d));
 #endif
+#if JSONB
+    case T_JSONB:
+      return jsonb_hash_internal(DatumGetJsonbP(d));
+#endif
 #if NPOINT
     case T_NPOINT:
       return npoint_hash(DatumGetNpointP(d));
@@ -492,6 +510,10 @@ datum_hash_extended(Datum d, meosType type, uint64 seed)
     // case T_GEOMETRY:
     // case T_GEOGRAPHY:
       // return gserialized_hash_extended(DatumGetGserializedP(d), seed);
+#if JSONB
+    case T_JSONB:
+      return jsonb_hash_extended_internal(DatumGetJsonbP(d), seed);
+#endif
 #if NPOINT
     case T_NPOINT:
       return npoint_hash_extended(DatumGetNpointP(d), seed);

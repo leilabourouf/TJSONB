@@ -298,6 +298,7 @@ CREATE FUNCTION tfloatSeq(tfloat[], text DEFAULT 'linear',
   RETURNS tfloat
   AS 'MODULE_PATHNAME', 'Tsequence_constructor'
   LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
 CREATE FUNCTION ttextSeq(ttext[], text DEFAULT 'step',
     lowerInc boolean DEFAULT true, upperInc boolean DEFAULT true)
   RETURNS ttext
@@ -2112,4 +2113,4 @@ CREATE OPERATOR CLASS ttext_hash_ops
     OPERATOR    1   = ,
     FUNCTION    1   temporal_hash(ttext);
 
-/******************************************************************************/
+/*****************************************************************************/

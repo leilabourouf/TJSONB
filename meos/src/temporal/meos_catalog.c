@@ -124,6 +124,10 @@ static const char *MEOS_TYPE_NAMES[] =
   [T_TGEOMETRY] = "tgeometry",
   [T_TGEOGRAPHY] = "tgeography",
   [T_TRGEOMETRY] = "trgeometry",
+  [T_JSONB]      = "jsonb",      /**< PostgreSQL jsonb base type */
+  [T_JSONPATH]   = "jsonpath",   /**< PostgreSQL json path */
+  [T_JSONBSET]   = "jsonbset",   /**< static set of JSONB values */
+  [T_TJSONB]     = "tjsonb",     /**< temporal JSONB trajectory */
 };
 
 /**
@@ -226,6 +230,7 @@ static const settype_catalog_struct MEOS_SETTYPE_CATALOG[] =
   {T_POSESET,       T_POSE},
   {T_NPOINTSET,     T_NPOINT},
   {T_CBUFFERSET,    T_CBUFFER},
+  {T_JSONBSET,      T_JSONB},
 };
 
 /**
@@ -278,6 +283,7 @@ static const temptype_catalog_struct MEOS_TEMPTYPE_CATALOG[] =
   {T_TRGEOMETRY, T_POSE},
   {T_TNPOINT,    T_NPOINT},
   {T_TCBUFFER,   T_CBUFFER},
+  {T_TJSONB,      T_JSONB},
 };
 
 /*****************************************************************************/
@@ -583,14 +589,17 @@ spantype_spansettype(meosType type)
  */
 inline bool
 meos_basetype(meosType type)
-{
+{ 
   return (type == T_BOOL || type == T_INT4 || type == T_INT8 || type == T_FLOAT8 ||
-    type == T_TEXT || type == T_DATE || type == T_TIMESTAMPTZ ||
+    type == T_TEXT || type == T_DATE || type == T_TIMESTAMPTZ || 
     /* The doubleX are internal types used for temporal aggregation */
     type == T_DOUBLE2 || type == T_DOUBLE3 || type == T_DOUBLE4 ||
     type == T_GEOMETRY || type == T_GEOGRAPHY
 #if CBUFFER
     || type == T_CBUFFER
+#endif
+#if JSONB
+    || type == T_JSONB
 #endif
 #if NPOINT
     || type == T_NPOINT
@@ -618,7 +627,11 @@ basetype_byvalue(meosType type)
 inline bool
 basetype_varlength(meosType type)
 {
+  assert(meos_basetype(type));
   return (type == T_TEXT || type == T_GEOMETRY || type == T_GEOGRAPHY
+#if JSONB 
+    || type == T_JSONB   
+#endif
 #if POSE || RGEO
     || type == T_POSE
 #endif
@@ -641,12 +654,14 @@ basetype_length(meosType type)
     return sizeof(double3);
   if (type == T_DOUBLE4)
     return sizeof(double4);
-  if (type == T_TEXT)
-    return -1;
-  if (type == T_GEOMETRY || type == T_GEOGRAPHY)
+  if (type == T_TEXT || type == T_GEOMETRY || type == T_GEOGRAPHY)
     return -1;
 #if CBUFFER
   if (type == T_CBUFFER)
+    return -1;
+#endif
+#if JSONB
+  if (type == T_JSONB)
     return -1;
 #endif
 #if NPOINT
@@ -670,9 +685,13 @@ basetype_length(meosType type)
 inline bool
 alphanum_basetype(meosType type)
 {
-  return (type == T_BOOL || type == T_INT4 || type == T_INT8 ||
-    type == T_FLOAT8 || type == T_TEXT || type == T_DATE ||
-    type == T_TIMESTAMPTZ);
+  return (type == T_BOOL || type == T_INT4 || type == T_INT8 || type == T_FLOAT8 || 
+      type == T_TEXT || type == T_DATE || type == T_TIMESTAMPTZ
+#if JSONB
+      || type == T_JSONB
+#endif
+      );
+
 }
 
 /**
@@ -682,8 +701,12 @@ alphanum_basetype(meosType type)
 inline bool
 alphanum_temptype(meosType type)
 {
-  return (type == T_TBOOL || type == T_TINT || type == T_TFLOAT ||
-    type == T_TTEXT);
+  return (type == T_TBOOL || type == T_TINT || type == T_TFLOAT || type == T_TTEXT  
+#if JSONB
+  || type == T_TJSONB
+#endif
+  );
+
 }
 #endif
 
@@ -744,6 +767,9 @@ set_basetype(meosType type)
 #if CBUFFER
       || type == T_CBUFFER
 #endif
+#if JSONB
+      || type == T_JSONB
+#endif
 #if NPOINT
       || type == T_NPOINT
 #endif
@@ -765,6 +791,9 @@ set_type(meosType type)
       type == T_GEOMSET || type == T_GEOGSET
 #if CBUFFER
       || type == T_CBUFFERSET
+#endif
+#if JSONB
+      || type == T_JSONBSET
 #endif
 #if NPOINT
       || type == T_NPOINTSET
@@ -840,7 +869,11 @@ inline bool
 alphanumset_type(meosType type)
 {
   return (type == T_TSTZSET || type == T_DATESET || type == T_INTSET ||
-    type == T_BIGINTSET || type == T_FLOATSET || type == T_TEXTSET);
+    type == T_BIGINTSET || type == T_FLOATSET || type == T_TEXTSET
+#if JSONB
+    || type == T_JSONBSET
+#endif
+    );
 }
 
 #if MEOS
@@ -1072,6 +1105,9 @@ temporal_type(meosType type)
 #if CBUFFER
     || type == T_TCBUFFER
 #endif
+#if JSONB
+    || type == T_TJSONB
+#endif
 #if NPOINT
     || type == T_TNPOINT
 #endif
@@ -1099,6 +1135,9 @@ temporal_basetype(meosType type)
     type == T_GEOMETRY || type == T_GEOGRAPHY
 #if CBUFFER
     || type == T_CBUFFER
+#endif
+#if JSONB
+    || type == T_JSONB
 #endif
 #if NPOINT
     || type == T_NPOINT
@@ -1142,7 +1181,11 @@ inline bool
 talphanum_type(meosType type)
 {
   return (type == T_TBOOL || type == T_TINT || type == T_TFLOAT ||
-    type == T_TTEXT);
+    type == T_TTEXT
+#if JSONB
+    || type == T_TJSONB
+#endif
+    );
 }
 #endif
 
@@ -1154,7 +1197,11 @@ inline bool
 talpha_type(meosType type)
 {
   return (type == T_TBOOL || type == T_TTEXT || type == T_TDOUBLE2 ||
-    type == T_TDOUBLE3 || type == T_TDOUBLE4);
+    type == T_TDOUBLE3 || type == T_TDOUBLE4
+#if JSONB
+    || type == T_TJSONB
+#endif
+    );
 }
 
 /**

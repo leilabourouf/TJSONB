@@ -1344,7 +1344,7 @@ datum_cbuffer_dwithin(Datum cb1, Datum cb2, Datum dist)
 
 /**
  * @ingroup meos_cbuffer_base_comp
- * @brief Return true if the first buffer is equal to the second one
+ * @brief Return true if the two circular buffers are equal
  * @param[in] cb1,cb2 Circular buffers
  * @csqlfn #Cbuffer_eq()
  */

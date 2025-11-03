@@ -352,7 +352,7 @@ ever_ne_text_ttext(const text *txt, const Temporal *temp)
   return ever_ne_base_temporal(PointerGetDatum(txt), temp);
 }
 
-/*****************************************************************************/
+/*****************************************************************************/ 
 
 /**
  * @ingroup meos_temporal_comp_ever
@@ -587,6 +587,10 @@ ever_lt_text_ttext(const text *txt, const Temporal *temp)
 
 /*****************************************************************************/
 
+
+
+
+
 /**
  * @ingroup meos_temporal_comp_ever
  * @brief Return true if a temporal integer is ever less than an integer
@@ -633,6 +637,9 @@ ever_lt_ttext_text(const Temporal *temp, const text *txt)
 }
 
 /*****************************************************************************/
+
+
+
 
 /**
  * @ingroup meos_temporal_comp_ever
@@ -681,6 +688,8 @@ always_lt_text_ttext(const text *txt, const Temporal *temp)
 
 /*****************************************************************************/
 
+
+
 /**
  * @ingroup meos_temporal_comp_ever
  * @brief Return true if a temporal integer is always less than an integer
@@ -727,6 +736,8 @@ always_lt_ttext_text(const Temporal *temp, const text *txt)
 }
 
 /*****************************************************************************/
+
+
 
 /**
  * @ingroup meos_temporal_comp_ever
@@ -776,6 +787,9 @@ ever_le_text_ttext(const text *txt, const Temporal *temp)
 
 /*****************************************************************************/
 
+
+
+
 /**
  * @ingroup meos_temporal_comp_ever
  * @brief Return true if a temporal integer is ever less than or equal to an
@@ -823,6 +837,8 @@ ever_le_ttext_text(const Temporal *temp, const text *txt)
 }
 
 /*****************************************************************************/
+
+
 
 /**
  * @ingroup meos_temporal_comp_ever
@@ -873,6 +889,8 @@ always_le_text_ttext(const text *txt, const Temporal *temp)
 
 /*****************************************************************************/
 
+
+
 /**
  * @ingroup meos_temporal_comp_ever
  * @brief Return true if a temporal integer is always less than or equal to an
@@ -922,6 +940,8 @@ always_le_ttext_text(const Temporal *temp, const text *txt)
 
 /*****************************************************************************/
 
+
+
 /**
  * @ingroup meos_temporal_comp_ever
  * @brief Return true if an integer is ever less than a temporal integer
@@ -968,6 +988,9 @@ ever_gt_text_ttext(const text *txt, const Temporal *temp)
 }
 
 /*****************************************************************************/
+
+
+
 
 /**
  * @ingroup meos_temporal_comp_ever
@@ -1016,6 +1039,8 @@ ever_gt_ttext_text(const Temporal *temp, const text *txt)
 
 /*****************************************************************************/
 
+
+
 /**
  * @ingroup meos_temporal_comp_ever
  * @brief Return true if an integer is always less than a temporal integer
@@ -1063,6 +1088,9 @@ always_gt_text_ttext(const text *txt, const Temporal *temp)
 
 /*****************************************************************************/
 
+
+
+
 /**
  * @ingroup meos_temporal_comp_ever
  * @brief Return true if a temporal integer is always less than an integer
@@ -1109,6 +1137,9 @@ always_gt_ttext_text(const Temporal *temp, const text *txt)
 }
 
 /*****************************************************************************/
+
+
+
 
 /**
  * @ingroup meos_temporal_comp_ever
@@ -1158,6 +1189,9 @@ ever_ge_text_ttext(const text *txt, const Temporal *temp)
 
 /*****************************************************************************/
 
+
+
+
 /**
  * @ingroup meos_temporal_comp_ever
  * @brief Return true if a temporal integer is ever less than or equal to an
@@ -1205,6 +1239,8 @@ ever_ge_ttext_text(const Temporal *temp, const text *txt)
 }
 
 /*****************************************************************************/
+
+
 
 /**
  * @ingroup meos_temporal_comp_ever
@@ -1255,6 +1291,8 @@ always_ge_text_ttext(const text *txt, const Temporal *temp)
 
 /*****************************************************************************/
 
+
+
 /**
  * @ingroup meos_temporal_comp_ever
  * @brief Return true if a temporal integer is always less than or equal to an
@@ -1301,6 +1339,10 @@ always_ge_ttext_text(const Temporal *temp, const text *txt)
   VALIDATE_TTEXT(temp, -1); VALIDATE_NOT_NULL(txt, -1);
   return always_ge_temporal_base(temp, PointerGetDatum(txt));
 }
+
+
+
+
 
 /*****************************************************************************
  * Temporal eq
@@ -1605,6 +1647,9 @@ tlt_text_ttext(const text *txt, const Temporal *temp)
 
 /*****************************************************************************/
 
+
+
+
 /**
  * @ingroup meos_temporal_comp_temp
  * @brief Return the temporal less than of a temporal integer and an integer
@@ -1651,6 +1696,8 @@ tlt_ttext_text(const Temporal *temp, const text *txt)
 }
 
 /*****************************************************************************/
+
+
 
 /**
  * @ingroup meos_temporal_comp_temp
@@ -1721,6 +1768,9 @@ tle_text_ttext(const text *txt, const Temporal *temp)
 
 /*****************************************************************************/
 
+
+
+
 /**
  * @ingroup meos_temporal_comp_temp
  * @brief Return the temporal less than or equal to of a temporal integer and
@@ -1770,6 +1820,10 @@ tle_ttext_text(const Temporal *temp, const text *txt)
 }
 
 /*****************************************************************************/
+
+
+
+
 
 /**
  * @ingroup meos_temporal_comp_temp
@@ -1837,6 +1891,9 @@ tgt_text_ttext(const text *txt, const Temporal *temp)
 
 /*****************************************************************************/
 
+
+
+
 /**
  * @ingroup meos_temporal_comp_temp
  * @brief Return the temporal greater than of a temporal integer and an integer
@@ -1883,6 +1940,10 @@ tgt_ttext_text(const Temporal *temp, const text *txt)
 }
 
 /*****************************************************************************/
+
+
+
+
 
 /**
  * @ingroup meos_temporal_comp_temp
@@ -1953,6 +2014,9 @@ tge_text_ttext(const text *txt, const Temporal *temp)
 
 /*****************************************************************************/
 
+
+
+
 /**
  * @ingroup meos_temporal_comp_temp
  * @brief Return the temporal greater than or equal to of a temporal integer
@@ -2002,6 +2066,7 @@ tge_ttext_text(const Temporal *temp, const text *txt)
 }
 
 /*****************************************************************************/
+
 
 /**
  * @ingroup meos_temporal_comp_temp

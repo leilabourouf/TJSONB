@@ -3035,10 +3035,10 @@ temporal_stops(const Temporal *temp, double maxdist,
   int64 mintunits = interval_units(minduration);
 
   assert(temptype_subtype(temp->subtype));
-  if (temp->subtype == TINSTANT || ! MEOS_FLAGS_LINEAR_INTERP(temp->flags))
+  if (temp->subtype == TINSTANT || ! MEOS_FLAGS_STEP_LINEAR_INTERP(temp->flags))
   {
     meos_error(ERROR, MEOS_ERR_INVALID_ARG_VALUE,
-      "Input must be a temporal sequence (set) with linear interpolation");
+      "Input must be a temporal sequence (set) with step or linear interpolation");
     return NULL;
   }
   else if (temp->subtype == TSEQUENCE)

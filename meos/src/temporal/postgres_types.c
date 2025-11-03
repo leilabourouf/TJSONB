@@ -61,6 +61,9 @@
 #include <utils/jsonb.h>
 #include <utils/numeric.h>
 #include <postgres_types.h>
+#if JSONB
+  #include "jsonb/tjsonb_funcs.h"
+#endif
 
 #if ! MEOS
   extern Datum call_function1(PGFunction func, Datum arg1);
@@ -268,4 +271,5 @@ datum_initcap(Datum value)
 }
 
 /*****************************************************************************/
+
 

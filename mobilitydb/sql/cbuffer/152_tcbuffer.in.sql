@@ -57,7 +57,7 @@ CREATE FUNCTION temporal_send(tcbuffer)
 
 CREATE FUNCTION tcbuffer_typmod_in(cstring[])
   RETURNS integer
-  AS 'MODULE_PATHNAME', 'Tcbuffer_typmod_in'
+  AS 'MODULE_PATHNAME', 'Tgeompoint_typmod_in'
   LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE TYPE tcbuffer (
@@ -456,6 +456,12 @@ CREATE FUNCTION shiftScaleTime(tcbuffer, interval, interval)
   AS 'MODULE_PATHNAME', 'Temporal_shift_scale_time'
   LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
+CREATE FUNCTION tsample(tcbuffer, duration interval,
+  origin timestamptz DEFAULT '2000-01-03', interp text DEFAULT 'discrete')
+  RETURNS tcbuffer
+  AS 'MODULE_PATHNAME', 'Temporal_tsample'
+  LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
 /*****************************************************************************
  * Restriction functions
  *****************************************************************************/
@@ -535,7 +541,7 @@ CREATE FUNCTION unnest(tcbuffer)
   LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 /*****************************************************************************
- * Stop Function
+ * Stops Function
  *****************************************************************************/
 
 CREATE FUNCTION stops(tcbuffer, maxdist float DEFAULT 0.0,

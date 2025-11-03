@@ -57,6 +57,7 @@
 #include "temporal/type_util.h"
 #include "geo/tgeo_spatialfuncs.h"
 #include "geo/tspatial_boxops.h"
+#include "jsonb/tjsonb_funcs.h"
 
 #include <utils/jsonb.h>
 #include <utils/numeric.h>
@@ -329,6 +330,9 @@ set_make_exp(const Datum *values, int count, int maxcount, meosType basetype,
   bool hasz = false;
   bool geodetic = false;
   // TODO Should we bypass the tests on tnpoint ?
+
+
+
   if (spatial_basetype(basetype) && basetype != T_NPOINT)
   {
     /* Ensure the spatial validity of the elements */
@@ -352,9 +356,18 @@ set_make_exp(const Datum *values, int count, int maxcount, meosType basetype,
   /* Sort the values and remove duplicates */
   Datum *newvalues;
   int newcount;
+#if JSONB
+  if (basetype == T_JSONB)
+  {
+    /* Do not sort or deduplicate for jsonbset — preserve order */
+    newvalues = palloc(sizeof(Datum) * count);
+    memcpy(newvalues, values, sizeof(Datum) * count);
+    newcount = count;
+  }
+  else
+#endif /* JSONB */
   if (order && count > 1)
   {
-  /* Sort the values and remove duplicates */
     newvalues = palloc(sizeof(Datum) * count);
     memcpy(newvalues, values, sizeof(Datum) * count);
     datumarr_sort(newvalues, count, basetype);
@@ -365,6 +378,7 @@ set_make_exp(const Datum *values, int count, int maxcount, meosType basetype,
     newvalues = (Datum *) values;
     newcount = count;
   }
+
 
   /* Get the bounding box size */
   meosType settype = basetype_settype(basetype);
@@ -852,6 +866,11 @@ textset_func(const Set *s, Datum (*func)(Datum))
     values[i] = func(SET_VAL_N(s, i));
   return set_make_exp(values, s->count, s->count, T_TEXT, ORDER);
 }
+
+
+
+
+
 
 /**
  * @ingroup meos_setspan_transf

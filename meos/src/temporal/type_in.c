@@ -39,6 +39,7 @@
 /* PostgreSQL */
 #include <postgres.h>
 #include "utils/timestamp.h"
+#include "utils/jsonb.h"  
 /* MEOS */
 #include <meos.h>
 #include <meos_rgeo.h>
@@ -193,6 +194,16 @@ basetype_in(const char *str, meosType type, bool end UNUSED, Datum *result)
       if (! cb)
         return false;
       *result = PointerGetDatum(cb);
+      return true;
+    }
+#endif
+#if JSONB
+    case T_JSONB:
+    {
+      Jsonb *jb = cstring2jsonb(str);
+      if (! jb)
+        return false;
+      *result = PointerGetDatum(jb);
       return true;
     }
 #endif
@@ -386,6 +397,22 @@ parse_mfjson_values(json_object *mfjson, meosType temptype, int *count)
         values[i] = PointerGetDatum(cstring_to_text(
           json_object_get_string(jvalue)));
         break;
+#if JSONB
+      case T_TJSONB:
+      {
+        /* Accept any JSON value for temporal‐JSONB */
+        const char *jstr = json_object_to_json_string(jvalue);
+        Jsonb *jb = cstring2jsonb(jstr);
+        if (! jb)
+        {
+          meos_error(ERROR, MEOS_ERR_MFJSON_INPUT,
+            "Invalid JSON value in 'values' array in MFJSON string");
+          return NULL;
+        }
+        values[i] = PointerGetDatum(jb);
+        break;
+      }
+#endif /* JSONB */
       default: /* Error! */
         meos_error(ERROR, MEOS_ERR_MFJSON_INPUT,
           "Unknown temporal type in MFJSON string: %s",
@@ -955,7 +982,11 @@ ensure_temptype_mfjson(const char *typestr)
       strcmp(typestr, "MovingPoint") != 0 &&
       strcmp(typestr, "MovingGeometry") != 0  &&
       strcmp(typestr, "MovingPose") != 0 &&
-      strcmp(typestr, "MovingRigidGeometry") != 0 )
+      strcmp(typestr, "MovingRigidGeometry") != 0
+#if JSONB
+      && strcmp(typestr, "MovingJSONB") != 0 
+#endif /* JSONB */
+     )
   {
     meos_error(ERROR, MEOS_ERR_MFJSON_INPUT,
       "Invalid 'type' value in MFJSON string: %s", typestr);
@@ -1021,6 +1052,10 @@ temporal_from_mfjson(const char *mfjson, meosType temptype)
     jtemptype = T_TFLOAT;
   else if (strcmp(typestr, "MovingText") == 0)
     jtemptype = T_TTEXT;
+#if JSONB
+  else if (strcmp(typestr, "MovingJSONB") == 0)
+    jtemptype = T_TJSONB;
+#endif /* JSONB */
   else if (strcmp(typestr, "MovingPoint") == 0)
   {
     if (temptype == T_TGEOGPOINT)
@@ -1408,6 +1443,34 @@ cbuffer_from_wkb_state(meos_wkb_parse_state *s, bool component)
 }
 #endif /* CBUFFER */
 
+#if JSONB
+/**
+ * @brief Read a JSONB value and advance the parse state forward
+ */
+Jsonb *
+jsonb_from_wkb_state(meos_wkb_parse_state *s)
+{
+  /* Get the size of the JSONB payload (without VARHDRSZ) */
+  size_t size = int64_from_wkb_state(s);
+  assert(size > 0);
+
+  /* Check that there is enough data to read */
+  wkb_parse_state_check(s, size);
+
+  /* Allocate space for a full varlena (VARSIZE = header + payload) */
+  Jsonb *jb = (Jsonb *) palloc(size + VARHDRSZ);
+  SET_VARSIZE(jb, size + VARHDRSZ);
+
+  /* Copy raw payload into VARDATA() */
+  memcpy(VARDATA(jb), s->pos, size);
+
+  /* Advance position */
+  s->pos += size;
+
+  return jb;
+}
+#endif /* JSONB */
+
 #if NPOINT
 /**
  * @brief Return the state flags initialized with a byte flag read from the
@@ -1542,7 +1605,11 @@ base_from_wkb_state(meos_wkb_parse_state *s)
 #if CBUFFER
     case T_CBUFFER:
       return PointerGetDatum(cbuffer_from_wkb_state(s, true));
-#endif /* NPOINT */
+#endif /* CBUFFER */
+#if JSONB
+    case T_JSONB:
+      return PointerGetDatum(jsonb_from_wkb_state(s));
+#endif /* JSONB */
 #if NPOINT
     case T_NPOINT:
       return PointerGetDatum(npoint_from_wkb_state(s));
@@ -2066,6 +2133,10 @@ type_from_wkb(const uint8_t *wkb, size_t size, meosType type)
   if (type == T_CBUFFER)
     return PointerGetDatum(cbuffer_from_wkb_state(&s, false));
 #endif /* CBUFFER */
+#if JSONB
+  if (type == T_JSONB)
+    return PointerGetDatum(jsonb_from_wkb_state(&s));
+#endif /* JSONB */
 #if NPOINT
   if (type == T_NPOINT)
     return PointerGetDatum(npoint_from_wkb_state(&s));
