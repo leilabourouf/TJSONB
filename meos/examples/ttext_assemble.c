@@ -47,6 +47,7 @@
 #include <time.h>
 #include <string.h>
 #include <meos.h>
+#include <postgres_types.h>
 
 #define MAX_INSTANTS 1000000
 /* Number of instants in a batch for printing a marker */
@@ -94,7 +95,7 @@ int main(void)
     char *value = malloc(sizeof(char) * (len + 2));
     memset(value, i % 2 == 0 ? 'A' : 'B', len);
     value[len] = '\0';
-    text *txt = cstring2text(value);
+    text *txt = cstring_to_text(value);
     t = add_timestamptz_interval(t, oneday);
     instants[i] = ttextinst_make(txt, t);
     free(value); free(txt);

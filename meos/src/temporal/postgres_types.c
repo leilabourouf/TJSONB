@@ -103,7 +103,7 @@
  // * @note Function taken from PostGIS file `lwgeom_in_geojson.c`
  // */
 // text *
-// cstring2text(const char *str)
+// cstring_to_text(const char *str)
 // {
   // /* Ensure the validity of the arguments */
   // VALIDATE_NOT_NULL(str, NULL);
@@ -122,7 +122,7 @@
  // * @note Function taken from PostGIS file @p lwgeom_in_geojson.c
  // */
 // char *
-// text2cstring(const text *txt)
+// text_to_cstring(const text *txt)
 // {
   // /* Ensure the validity of the arguments */
   // VALIDATE_NOT_NULL(txt, NULL);

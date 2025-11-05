@@ -21,6 +21,10 @@
 
 #include "utils/mb/pg_wchar.h"
 
+#ifdef __APPLE__
+#include <xlocale.h>   /* for nl_langinfo_l and newlocale on macOS */
+#endif
+
 
 /*
  * This table needs to recognize all the CODESET spellings for supported
