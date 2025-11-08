@@ -29,6 +29,7 @@
 #include <utils/jsonb.h>
 #include "utils/jsonfuncs.h"
 #include <utils/varlena.h> /* For DatumGetTextP */
+#include "jsonfuncs_compat.h"
 
 #include <utils/date.h>
 #include <postgres_types.h>
@@ -546,7 +547,7 @@ report_json_context(JsonLexContext *lex)
     context_end - lex->input < lex->input_length &&
     *context_end != '\n' && *context_end != '\r') ? "..." : "";
 
-  elog("JSON data, line %d: %s%s%s", lex->line_number, prefix, ctxt, suffix);
+  elog(ERROR, "JSON data, line %d: %s%s%s", lex->line_number, prefix, ctxt, suffix);
   return -1;
 }
 

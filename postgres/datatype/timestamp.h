@@ -44,6 +44,8 @@ typedef int32 fsec_t;			/* fractional seconds (in microseconds) */
 /*
  * Storage format for type interval.
  */
+#ifndef INTERVAL_DEFINED
+#define INTERVAL_DEFINED 1
 typedef struct
 {
 	TimeOffset	time;			/* all time units other than days, months and
@@ -51,6 +53,7 @@ typedef struct
 	int32		day;			/* days, after time for alignment */
 	int32		month;			/* months and years, after time for alignment */
 } Interval;
+#endif
 
 /*
  * Data structure representing a broken-down interval.

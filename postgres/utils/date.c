@@ -35,6 +35,56 @@
 #include "utils/jsonb.h"
 #include "postgres_types.h"
 
+#include "date_compat.h"
+
+/*
+ * Compatibility adjustments for standalone compilation
+ * ----------------------------------------------------
+ * These macros and inline helpers safely adapt the PostgreSQL backend code
+ * to normal C compilation without server backend Datum types.
+ */
+
+/* ----------------------------------------------------------------------
+ * Numeric ↔ Datum conversions
+ * ---------------------------------------------------------------------- */
+#undef NumericGetDatum
+#define NumericGetDatum(X) ((Datum)(uintptr_t)(X))
+
+#undef DatumGetNumeric
+#define DatumGetNumeric(X) ((Numeric)(uintptr_t)(X))
+
+/* Optional helpers for clarity (no functional change) */
+#define RETURN_NUMERIC_FROM_DATUM(X) ((Numeric)(uintptr_t)(X))
+#define RETURN_DATUM_FROM_NUMERIC(X) ((Datum)(uintptr_t)(X))
+
+/* ----------------------------------------------------------------------
+ * DT_NOEND handling
+ * ---------------------------------------------------------------------- */
+
+/* Integer sentinel for Timestamp / TimestampTz */
+#ifndef DT_NOEND_INT
+#define DT_NOEND_INT ((int64)INT64_MAX)
+#endif
+
+/* Pointer sentinel for TimeTzADT* */
+#ifndef DT_NOEND_PTR
+#define DT_NOEND_PTR ((TimeTzADT *)(uintptr_t)INT64_MAX)
+#endif
+
+/*
+ * By default, use integer sentinel for Timestamp and TimestampTz functions.
+ * We'll restore pointer sentinel later for TimeTzADT* functions.
+ */
+#ifdef DT_NOEND
+#undef DT_NOEND
+#endif
+#define DT_NOEND DT_NOEND_INT
+
+#ifdef TIMESTAMP_NOEND
+#undef TIMESTAMP_NOEND
+#endif
+#define TIMESTAMP_NOEND(j) do { (j) = DT_NOEND_INT; } while (0)
+
 extern Numeric int64_div_fast_to_numeric(int64 val1, int log10val2);
 
 // #include "access/xact.h"
@@ -1092,9 +1142,9 @@ date_extract(DateADT date, const text *units)
       case DTK_EPOCH:
         pfree(lowunits);
         if (DATE_IS_NOBEGIN(date))
-          return NumericGetDatum(pg_numeric_in("-Infinity", -1));
+          return pg_numeric_in("-Infinity", -1);
         else
-          return NumericGetDatum(pg_numeric_in("Infinity", -1));
+          return pg_numeric_in("Infinity", -1);
       default:
         elog(ERROR, "unit \"%s\" not supported for type %s",
           // lowunits, format_type_be(DATEOID));
@@ -2535,7 +2585,7 @@ plus_timetz_interval(const TimeTzADT *timetz, const Interval *interv)
   if (INTERVAL_NOT_FINITE(interv))
   {
     elog(ERROR, "cannot add infinite interval to time");
-    return PG_INT64_MAX;
+    return DT_NOEND_PTR;
   }
 
   TimeTzADT *result = (TimeTzADT *) palloc(sizeof(TimeTzADT));
@@ -2558,7 +2608,7 @@ minus_timetz_interval(const TimeTzADT *timetz, const Interval *interv)
   if (INTERVAL_NOT_FINITE(interv))
   {
     elog(ERROR, "cannot subtract infinite interval from time");
-    return PG_INT64_MAX;
+    return DT_NOEND_PTR;
   }
 
   TimeTzADT *result = (TimeTzADT *) palloc(sizeof(TimeTzADT));
@@ -2637,7 +2687,7 @@ timetz_to_time(const TimeTzADT *timetz)
  * @note Derived from PostgreSQL function @p time_timetz()
  */
 TimeTzADT *
-time_to_timetz(TimeADT date)
+time_to_timetz(TimeADT tval)
 {
   TimeTzADT *result;
   struct pg_tm tt, *tm = &tt;
@@ -2645,12 +2695,14 @@ time_to_timetz(TimeADT date)
   int tz;
 
   GetCurrentDateTime(tm);
-  time2tm(time, tm, &fsec);
+
+  /* Convert internal time to broken-down time representation */
+  time2tm(tval, tm, &fsec);
+
   tz = DetermineTimeZoneOffset(tm, session_timezone);
 
   result = (TimeTzADT *) palloc(sizeof(TimeTzADT));
-
-  result->time = time;
+  result->time = tval;
   result->zone = tz;
 
   return result;
@@ -2669,12 +2721,12 @@ timestamptz_to_timetz(TimestampTz tztz)
   fsec_t fsec;
 
   if (TIMESTAMP_NOT_FINITE(tztz))
-    return PG_INT64_MAX;
+    return DT_NOEND_PTR;
 
   if (timestamp2tm(tztz, &tz, tm, &fsec, NULL, NULL) != 0)
   {
     elog(ERROR, "timestamp out of range");
-    return PG_INT64_MAX;
+    return DT_NOEND_PTR;
   }
 
   TimeTzADT *result = (TimeTzADT *) palloc(sizeof(TimeTzADT));
@@ -2913,7 +2965,7 @@ pg_timetz_zone(const TimeTzADT *timetz, const text *zone)
     if (timestamp2tm(now, &tz, &tm, &fsec, NULL, tzp) != 0)
     {
       elog(ERROR, "timestamp out of range");
-      return DT_NOEND;
+      return DT_NOEND_PTR;
     }
   }
 
@@ -2991,5 +3043,9 @@ pg_timetz_at_local(const TimeTzADT *timetz)
   char *zone = cstring_to_text(tzn);
   return pg_timetz_zone(timetz, zone);
 }
+
+/* Restore pointer sentinel for TimeTzADT* functions */
+#undef DT_NOEND
+#define DT_NOEND DT_NOEND_PTR
 
 /*****************************************************************************/

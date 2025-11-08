@@ -26,6 +26,7 @@
 #include "utils/date.h"
 #include "utils/datetime.h"
 #include "utils/tzparser.h"
+#include "datetime_compat.h"
 
 // #include "access/htup_details.h"
 // #include "access/xact.h"

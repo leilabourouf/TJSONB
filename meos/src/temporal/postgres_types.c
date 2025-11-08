@@ -84,17 +84,17 @@
  * Text and binary string functions
  *****************************************************************************/
 
-// /**
- // * @brief Convert a C binary string into a bytea
- // */
-// bytea *
-// bstring2bytea(const uint8_t *wkb, size_t size)
-// {
-  // bytea *result = palloc(size + VARHDRSZ);
-  // memcpy(VARDATA(result), wkb, size);
-  // SET_VARSIZE(result, size + VARHDRSZ);
-  // return result;
-// }
+/**
+ * @brief Convert a C binary string into a bytea
+*/
+bytea *
+bstring2bytea(const uint8_t *wkb, size_t size)
+{
+   bytea *result = palloc(size + VARHDRSZ);
+   memcpy(VARDATA(result), wkb, size);
+   SET_VARSIZE(result, size + VARHDRSZ);
+   return result;
+}
 
 // /**
  // * @ingroup meos_base_text

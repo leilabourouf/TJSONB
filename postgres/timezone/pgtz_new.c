@@ -22,6 +22,7 @@
 #include "pgtz.h"
 #include "storage/fd.h"
 #include "utils/hsearch.h"
+#include "pgtz_compat.h"
 
 /* Current session timezone (controlled by TimeZone GUC) */
 pg_tz *session_timezone = NULL;

@@ -28,6 +28,8 @@
 #include <utils/jsonb.h>
 #include "utils/jsonfuncs.h"
 #include <utils/varlena.h> /* For DatumGetTextP */
+#include "jsonb_compat.h"
+
 
 #include <utils/date.h>
 #include <postgres_types.h>
@@ -840,7 +842,7 @@ jsonb_int16(Jsonb *in)
   if (!JsonbExtractScalar(&in->root, &v))
     cannotCastJsonbValue(v.type, "smallint");
   if (v.type == jbvNull)
-    return NULL;
+    return 0;
   if (v.type != jbvNumeric)
     cannotCastJsonbValue(v.type, "smallint");
   return numeric_to_int16(v.val.numeric);
@@ -853,7 +855,7 @@ jsonb_to_int32(Jsonb *in)
   if (!JsonbExtractScalar(&in->root, &v))
     cannotCastJsonbValue(v.type, "integer");
   if (v.type == jbvNull)
-    return NULL;
+    return 0;
   if (v.type != jbvNumeric)
     cannotCastJsonbValue(v.type, "integer");
   return numeric_to_int32(v.val.numeric);
@@ -866,7 +868,7 @@ jsonb_to_int64(Jsonb *in)
   if (!JsonbExtractScalar(&in->root, &v))
     cannotCastJsonbValue(v.type, "bigint");
   if (v.type == jbvNull)
-    return NULL;
+    return 0;
   if (v.type != jbvNumeric)
     cannotCastJsonbValue(v.type, "bigint");
   return numeric_to_int64(v.val.numeric);

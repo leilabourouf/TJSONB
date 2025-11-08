@@ -26,6 +26,8 @@
 #include "utils/memutils.h"
 #include "utils/numeric.h"
 #include "utils/varlena.h"
+#include "align_compat.h"
+
 
 #include "postgres_types.h"
 

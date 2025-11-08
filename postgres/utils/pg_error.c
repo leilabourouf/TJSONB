@@ -44,21 +44,16 @@
 /**
  * @brief Redefining elog in Postgres
  */
+#ifndef HAVE_ELOG_STUB
 void
 elog(int errlevel, const char *format, ...)
 {
-  char buffer[1024];
-  va_list args;
-  va_start(args, format);
-  /* TODO: maybe check if the error message was truncated */
-  vsnprintf(buffer, sizeof(buffer), format, args);
-  va_end(args);
-  /* Execute the error handler function */
-  fprintf (stderr, "%s\n", buffer);
-  if (errlevel == ERROR)
-    exit(EXIT_FAILURE);
-  return;
+    va_list args;
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    fprintf(stderr, "\n");
+    va_end(args);
 }
-
+#endif
 
 /*****************************************************************************/

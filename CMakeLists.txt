@@ -330,6 +330,12 @@ else()
 endif()
 
 #-------------------------------------
+# PostgreSQL compatibility layer
+#-------------------------------------
+# This provides pgtypes 
+add_subdirectory(postgres)
+
+#-------------------------------------
 # Build either MobilityDB or MEOS
 #-------------------------------------
 

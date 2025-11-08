@@ -30,6 +30,7 @@
 #include "utils/jsonb.h"
 #include "utils/numeric.h"
 #include <postgres_types.h>
+#include "timestamp_compat.h"
 
 // #include "access/detoast.h"
 // #include "access/toast_compression.h"
@@ -611,7 +612,7 @@ text_substring(const text *txt, int32 start, int32 length,
      * If we're working with an untoasted source, no need to do an extra
      * copying step.
      */
-    slice = (text *) DatumGetPointer(txt);
+    slice = (text *) txt;
 
     /* see if we got back an empty string */
     if (VARSIZE_ANY_EXHDR(slice) == 0)
@@ -748,8 +749,8 @@ text_overlay(const text *txt1, const text *txt2, int from, int count)
     return NULL;
   }
 
-  text *s1 = text_substring(PointerGetDatum(txt1), 1, from - 1, false);
-  text *s2 = text_substring(PointerGetDatum(txt1), sp_from_count, -1, true);
+  text *s1 = text_substring(txt1, 1, from - 1, false);
+  text *s2 = text_substring(txt1, sp_from_count, -1, true);
   text *res = text_catenate(s1, txt2);
   text *result = text_catenate(res, s2);
   pfree(s1); pfree(s2); pfree(res);

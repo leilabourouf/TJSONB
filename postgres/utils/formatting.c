@@ -77,6 +77,9 @@
 #include "utils/numeric.h"
 #include "utils/pg_locale.h"
 #include "utils/timestamp.h"
+#include "formatting_compat.h"
+#include "int_compat.h"
+
 // #include "varatt.h"
 
 #ifdef USE_ICU
@@ -4033,7 +4036,7 @@ to_timestamp(text *date_txt, text *fmt, Oid collid)
   if (tm2timestamp(&tm, fsec, &tz, &result) != 0)
   {
     elog(ERROR, "timestamp out of range");
-    return NULL;
+    return 0;
   }
 
   /* Use the specified fractional precision, if any. */

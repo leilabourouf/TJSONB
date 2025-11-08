@@ -189,6 +189,16 @@ endif()
 
 # Build the library
 add_library(${MOBILITYDB_LIB_NAME} MODULE ${PROJECT_OBJECTS})
+
+
+# Link with PostgreSQL compatibility stubs (pgtypes)
+target_link_libraries(${MOBILITYDB_LIB_NAME} pgtypes)
+
+# Ensure real PostgreSQL headers override compatibility stubs
+target_compile_definitions(${MOBILITYDB_LIB_NAME} PRIVATE USE_REAL_POSTGRES=1)
+
+
+
 if(APPLE)
   set_target_properties(${MOBILITYDB_LIB_NAME} PROPERTIES
     SUFFIX ".dylib"

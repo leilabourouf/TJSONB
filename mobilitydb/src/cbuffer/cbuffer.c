@@ -36,6 +36,7 @@
 #include <postgres.h>
 #include <libpq/pqformat.h>
 #include <postgres_types.h>
+#include "utils/bytea.h"
 /* PostGIS */
 #include <liblwgeom.h>
 /* MEOS */

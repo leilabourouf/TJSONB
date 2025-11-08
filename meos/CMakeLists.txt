@@ -14,6 +14,9 @@ set(MEOS ON)
 # not used in the MobilityDB PostgreSQL extension.
 add_definitions(-DMEOS=1)
 
+# Force local postgres headers to take priority globally
+include_directories(BEFORE "${CMAKE_SOURCE_DIR}/postgres")
+
 # Set the version and name of the MEOS library
 set(MEOS_LIB_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
 set(MEOS_LIB_NAME "meos")
@@ -89,11 +92,13 @@ add_definitions(-DPOSTGIS_PGSQL_VERSION=${POSTGIS_PGSQL_VERSION})
 # MobilityDB directories
 #--------------------------------
 
-# PostgreSQL
-configure_file(../postgres/pg_config.h.in ../postgres/pg_config.h)
-include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/postgres")
-include_directories(SYSTEM "${CMAKE_BINARY_DIR}/postgres")
-add_subdirectory("${CMAKE_SOURCE_DIR}/postgres" "postgres")
+# PostgreSQL (use existing pgtypes target if already built)
+if (NOT TARGET pgtypes)
+  configure_file(../postgres/pg_config.h.in ../postgres/pg_config.h)
+  include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/postgres")
+  include_directories(SYSTEM "${CMAKE_BINARY_DIR}/postgres")
+  add_subdirectory("${CMAKE_SOURCE_DIR}/postgres" "postgres")
+endif()
 
 # PostGIS
 configure_file(../postgis/liblwgeom/liblwgeom.h.in ../postgis/liblwgeom/liblwgeom.h)
@@ -113,14 +118,14 @@ if(CMAKE_GENERATOR STREQUAL "Unix Makefiles" OR CMAKE_GENERATOR STREQUAL "Ninja"
   # Disable all warnings on embeded code from PostgreSQL and PostGIS
   target_compile_options(liblwgeom PRIVATE "-w")
   target_compile_options(ryu PRIVATE "-w")
-  target_compile_options(timezone PRIVATE "-w")
-  target_compile_options(utils PRIVATE "-w")
+  #target_compile_options(timezone PRIVATE "-w")
+  #target_compile_options(utils PRIVATE "-w")
 elseif(CMAKE_GENERATOR STREQUAL "Visual Studio 17 2022")
   # Disable all warnings on embedded code from PostgreSQL and PostGIS
   target_compile_options(liblwgeom PRIVATE "/W0")
   target_compile_options(ryu PRIVATE "/W0")
-  target_compile_options(timezone PRIVATE "/W0")
-  target_compile_options(utils PRIVATE "/W0")
+  #target_compile_options(timezone PRIVATE "/W0")
+  #target_compile_options(utils PRIVATE "/W0")
   # Enable all warnings on MEOS and MobilityDB
   target_compile_options(temporal PRIVATE "/W4")
   target_compile_options(geo PRIVATE "/W4")
@@ -186,36 +191,51 @@ if(RGEO)
 endif()
 
 # PostgreSQL
-set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:access>")
-set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:catalog>")
-set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:common>")
-set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:conversion_procs>")
-set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:parser>")
-set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:port>")
-set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:timezone>")
-set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:utils>")
-set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:mb>")
+#set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:access>")
+#set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:catalog>")
+#set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:common>")
+#set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:conversion_procs>")
+#set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:parser>")
+#set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:port>")
+#set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:timezone>")
+#set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:utils>")
+#set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:mb>")
 
 # Build the library: PostGIS
 set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:liblwgeom>")
 set(PROJECT_OBJECTS ${PROJECT_OBJECTS} "$<TARGET_OBJECTS:ryu>")
 
-# Build the library: All
+#--------------------------------
+# Build the MEOS library
+#--------------------------------
+
 add_library(${MEOS_LIB_NAME} ${PROJECT_OBJECTS})
+
 if(APPLE)
   set_target_properties(${MEOS_LIB_NAME} PROPERTIES
     LINK_FLAGS "-Wl,-undefined,dynamic_lookup")
 endif()
 
 #--------------------------------
-# Specify libraries to link
+# Link required libraries
 #--------------------------------
 
-target_link_libraries(${MEOS_LIB_NAME} ${JSON-C_LIBRARIES})
-target_link_libraries(${MEOS_LIB_NAME} ${GEOS_LIBRARY})
-target_link_libraries(${MEOS_LIB_NAME} ${PROJ_LIBRARIES})
-target_link_libraries(${MEOS_LIB_NAME} ${GSL_LIBRARY})
-target_link_libraries(${MEOS_LIB_NAME} ${GSL_CBLAS_LIBRARY})
+target_link_libraries(${MEOS_LIB_NAME}
+  PRIVATE
+    pgtypes
+    ${JSON-C_LIBRARIES}
+    ${GEOS_LIBRARY}
+    ${PROJ_LIBRARIES}
+    ${GSL_LIBRARY}
+    ${GSL_CBLAS_LIBRARY}
+)
+
+# Ensure PostgreSQL lightweight headers are always found first
+target_include_directories(${MEOS_LIB_NAME} PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/postgres>
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/meos/include>
+  $<INSTALL_INTERFACE:include>
+)
 
 #--------------------------------
 # Belongs to MEOS
@@ -236,7 +256,7 @@ install(
 
 # Files from ${CMAKE_SOURCE_DIR}
 
-install(FILES "${CMAKE_SOURCE_DIR}/postgres/pg_bool.h"
+#[[install(FILES "${CMAKE_SOURCE_DIR}/postgres/pg_bool.h"
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(FILES "${CMAKE_SOURCE_DIR}/postgres/pg_date.h"
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
@@ -256,9 +276,15 @@ install(FILES "${CMAKE_SOURCE_DIR}/postgres/pg_timestamp.h"
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(FILES "${CMAKE_SOURCE_DIR}/postgres/pg_json.h"
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-  
 install(FILES "${CMAKE_SOURCE_DIR}/postgres/postgres_types.h"
-  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")]]
+
+# Install all PostgreSQL-compatible headers directly under include/
+install(
+  DIRECTORY "${CMAKE_SOURCE_DIR}/postgres/"
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+  FILES_MATCHING PATTERN "*.h"
+)
 
 install(
   FILES "${CMAKE_SOURCE_DIR}/meos/include/meos_internal_geo.h"

@@ -24,6 +24,7 @@
  *-------------------------------------------------------------------------
  */
 #define MAX_LEVENSHTEIN_STRLEN    255
+#include "levenshtein_compat.h"
 
 /*
  * Calculates Levenshtein distance metric between supplied strings, which are

@@ -14,6 +14,7 @@
 #include "catalog/pg_collation_d.h"
 #include "common/unicode_case.h"
 #include "utils/pg_locale.h"
+#include "pg_locale_builtin_compat.h"
 
 // #include "catalog/pg_database.h"
 // #include "catalog/pg_collation.h"

@@ -37,6 +37,7 @@
 #include "catalog/pg_conversion.h"
 #include "utils/memutils.h"
 #include "utils/mb/pg_wchar.h"
+#include "mbutils_compat.h"
 
 // #include "access/xact.h"
 // #include "catalog/namespace.h"

@@ -9,6 +9,14 @@
  *-----------------------------------------------------------------------
  */
 
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#define _XOPEN_SOURCE 700
+#include <xlocale.h>
+#define HAVE_MBSTOWCS_L 1
+#define HAVE_WCSTOMBS_L 1
+#endif
+
 #include "postgres.h"
 
 #include <limits.h>

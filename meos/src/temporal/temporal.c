@@ -4,7 +4,7 @@
  * Copyright (c) 2016-2025, Université libre de Bruxelles and MobilityDB
  * contributors
  *
- * MobilityDB includes portions of PostGIS version 3 source code released
+ * MobilityDB includes portions of PostGIS version 3 source code releasedsud
  * under the GNU General Public License (GPLv2 or later).
  * Copyright (c) 2001-2025, PostGIS contributors
  *

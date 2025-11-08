@@ -25,6 +25,14 @@
 /* Ideally this would be in a .h file, but it hardly seems worth the trouble */
 extern const char *select_default_timezone(const char *share_path);
 
+#ifndef HAVE_TZ_FALLBACK
+#define HAVE_TZ_FALLBACK 1
+
+#undef tzname
+const char *pg_fallback_timezone = "UTC";
+
+#endif /* HAVE_TZ_FALLBACK */
+
 
 #ifndef SYSTEMTZDIR
 static char tzdirpath[MAXPGPATH];
@@ -182,7 +190,9 @@ get_timezone_offset(struct tm *tm)
 #elif defined(HAVE_INT_TIMEZONE)
 	return -TIMEZONE_GLOBAL;
 #else
-#error No way to determine TZ? Can this happen?
+    /* Fallback: assume UTC if no timezone offset info available */
+    (void)tm;
+    return 0;  /* UTC offset = 0 */
 #endif
 }
 

@@ -39,6 +39,8 @@
 #include "utils/guc.h"
 #include "utils/memutils.h"
 #include "utils/pg_locale.h"
+#include "pg_locale_compat.h"
+
 
 // #include "postgres.h"
 // #include <time.h>
@@ -145,7 +147,7 @@ static bool CurrentLCTimeValid = false;
 
 /* Global variables added by MEOS */
 char *database_locale = "C";
-char *database_locprovider = COLLPROVIDER_BUILTIN;
+char database_locprovider = COLLPROVIDER_BUILTIN;
 char *database_icurules = NULL;
 char *database_ctype = NULL;
 char *database_collate = NULL;

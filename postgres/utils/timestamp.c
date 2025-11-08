@@ -33,8 +33,17 @@
 
 #include "utils/jsonb.h"
 #include "postgres_types.h"
+#include "timestamp_compat.h"
+
+/*
+ * Flexible return macros that handle Datum, Numeric, and float8
+ */
+#define RETURN_DATUM(X) ((Datum)(uintptr_t)(X))
+#define RETURN_NUMERIC(X) RETURN_DATUM(X)
+#define RETURN_FLOAT8(X) ((Datum)(uintptr_t)(X))
 
 extern Numeric int64_div_fast_to_numeric(int64 val1, int log10val2);
+
 
 // #include "access/xact.h"
 // #include "catalog/pg_type.h"
@@ -4815,7 +4824,7 @@ timestamp_part_common(text *units, Timestamp timestamp, bool retnumeric)
            * tm->tm_sec * 1000 + fsec / 1000
            * = (tm->tm_sec * 1'000'000 + fsec) / 1000
            */
-          return NumericGetDatum(int64_div_fast_to_numeric(tm->tm_sec * INT64CONST(1000000) + fsec, 3));
+          return RETURN_DATUM(NumericGetDatum(int64_div_fast_to_numeric(tm->tm_sec * INT64CONST(1000000) + fsec, 3)));
         else
           return Float8GetDatum(tm->tm_sec * 1000.0 + fsec / 1000.0);
 
@@ -4826,7 +4835,7 @@ timestamp_part_common(text *units, Timestamp timestamp, bool retnumeric)
            * tm->tm_sec + fsec / 1'000'000
            * = (tm->tm_sec * 1'000'000 + fsec) / 1'000'000
            */
-          return NumericGetDatum(int64_div_fast_to_numeric(tm->tm_sec * INT64CONST(1000000) + fsec, 6));
+          return RETURN_DATUM(NumericGetDatum(int64_div_fast_to_numeric(tm->tm_sec * INT64CONST(1000000) + fsec, 6)));
         else
           return Float8GetDatum(tm->tm_sec + fsec / 1000000.0);
 
@@ -4901,13 +4910,13 @@ timestamp_part_common(text *units, Timestamp timestamp, bool retnumeric)
       case DTK_JULIAN:
         pfree(lowunits);
         if (retnumeric)
-          return NumericGetDatum(numeric_add_opt_error(
+          return RETURN_DATUM(NumericGetDatum(numeric_add_opt_error(
             int64_to_numeric(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday)),
             numeric_div_opt_error(int64_to_numeric(
               ((((tm->tm_hour * MINS_PER_HOUR) + tm->tm_min) * 
               SECS_PER_MINUTE) + tm->tm_sec) * INT64CONST(1000000) + fsec),
               int64_to_numeric(SECS_PER_DAY * INT64CONST(1000000)), NULL),
-            NULL));
+            NULL)));
         else
           return Float8GetDatum(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday) +
             ((((tm->tm_hour * MINS_PER_HOUR) + tm->tm_min) * SECS_PER_MINUTE) +
@@ -4963,7 +4972,7 @@ timestamp_part_common(text *units, Timestamp timestamp, bool retnumeric)
               int64_to_numeric(1000000), NULL);
             result = pg_numeric_round(result, 6);
           }
-          return NumericGetDatum(result);
+          return RETURN_DATUM(NumericGetDatum(result));
         }
         else
         {
@@ -4993,7 +5002,7 @@ timestamp_part_common(text *units, Timestamp timestamp, bool retnumeric)
 
   pfree(lowunits);
   if (retnumeric)
-    return NumericGetDatum(int64_to_numeric(intresult));
+    return RETURN_DATUM(NumericGetDatum(int64_to_numeric(intresult)));
   else
     return Float8GetDatum(intresult);
 }
@@ -5026,7 +5035,7 @@ pg_timestamp_part(Timestamp ts, const text *units)
 Numeric
 timestamp_extract(Timestamp ts, const text *units)
 {
-  return NumericGetDatum(timestamp_part_common(units, ts, true));
+  return (Numeric) DatumGetPointer(NumericGetDatum(timestamp_part_common(units, ts, true)));
 }
 
 /* timestamptz_part() and extract_timestamptz()
@@ -5103,8 +5112,8 @@ timestamptz_part_common(TimestampTz timestamp, text *units, bool retnumeric)
            * tm->tm_sec * 1000 + fsec / 1000
            * = (tm->tm_sec * 1'000'000 + fsec) / 1000
            */
-          return NumericGetDatum(int64_div_fast_to_numeric(tm->tm_sec *
-            INT64CONST(1000000) + fsec, 3));
+          return RETURN_DATUM(NumericGetDatum(int64_div_fast_to_numeric(tm->tm_sec *
+            INT64CONST(1000000) + fsec, 3)));
         else
           return Float8GetDatum(tm->tm_sec * 1000.0 + fsec / 1000.0);
 
@@ -5115,8 +5124,8 @@ timestamptz_part_common(TimestampTz timestamp, text *units, bool retnumeric)
            * tm->tm_sec + fsec / 1'000'000
            * = (tm->tm_sec * 1'000'000 + fsec) / 1'000'000
            */
-          return NumericGetDatum(int64_div_fast_to_numeric(tm->tm_sec *
-            INT64CONST(1000000) + fsec, 6));
+          return RETURN_DATUM(NumericGetDatum(int64_div_fast_to_numeric(tm->tm_sec *
+            INT64CONST(1000000) + fsec, 6)));
         else
           return Float8GetDatum(tm->tm_sec + fsec / 1000000.0);
 
@@ -5179,13 +5188,13 @@ timestamptz_part_common(TimestampTz timestamp, text *units, bool retnumeric)
       case DTK_JULIAN:
         pfree(lowunits);
         if (retnumeric)
-          return NumericGetDatum(numeric_add_opt_error(
+          return RETURN_DATUM(NumericGetDatum(numeric_add_opt_error(
             int64_to_numeric(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday)),
             numeric_div_opt_error(
               int64_to_numeric(((((tm->tm_hour * MINS_PER_HOUR) + tm->tm_min) * 
                 SECS_PER_MINUTE) + tm->tm_sec) * INT64CONST(1000000) + fsec),
               int64_to_numeric(SECS_PER_DAY * INT64CONST(1000000)), 
-              NULL), NULL));
+              NULL), NULL)));
         else
           return Float8GetDatum(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday) +
             ((((tm->tm_hour * MINS_PER_HOUR) + tm->tm_min) * SECS_PER_MINUTE) +
@@ -5237,7 +5246,7 @@ timestamptz_part_common(TimestampTz timestamp, text *units, bool retnumeric)
               int64_to_numeric(1000000), NULL);
             result = pg_numeric_round(result, 6);
           }
-          return NumericGetDatum(result);
+          return RETURN_DATUM(NumericGetDatum(result));
         }
         else
         {
@@ -5267,7 +5276,7 @@ timestamptz_part_common(TimestampTz timestamp, text *units, bool retnumeric)
 
   pfree(lowunits);
   if (retnumeric)
-    return NumericGetDatum(int64_to_numeric(intresult));
+    return RETURN_DATUM(NumericGetDatum(int64_to_numeric(intresult)));
   else
     return Float8GetDatum(intresult);
 }
@@ -5282,13 +5291,13 @@ timestamptz_part_common(TimestampTz timestamp, text *units, bool retnumeric)
 float8
 timestamptz_part(TimestampTz ts, const text *units)
 {
-  return timestamptz_part_common(ts, units, false);
+  return RETURN_FLOAT8(timestamptz_part_common(ts, units, false));
 }
 #endif
 float8
 pg_timestamptz_part(TimestampTz ts, const text *units)
 {
-  return timestamptz_part_common(ts, units, false);
+  return RETURN_FLOAT8(timestamptz_part_common(ts, units, false));
 }
 
 /**
@@ -5300,7 +5309,7 @@ pg_timestamptz_part(TimestampTz ts, const text *units)
 Numeric
 timestamptz_extract(TimestampTz ts, const text *units)
 {
-  return timestamptz_part_common(ts, units, true);
+  return (Numeric) DatumGetPointer(NumericGetDatum(timestamp_part_common(units, ts, true)));
 }
 
 /*
@@ -5411,8 +5420,8 @@ interval_part_common(Interval *interval, text *units, bool retnumeric)
            * tm->tm_sec * 1000 + fsec / 1000
            * = (tm->tm_sec * 1'000'000 + fsec) / 1000
            */
-          return NumericGetDatum(int64_div_fast_to_numeric(
-            tm->tm_sec * INT64CONST(1000000) + tm->tm_usec, 3));
+          return RETURN_DATUM(NumericGetDatum(int64_div_fast_to_numeric(
+            tm->tm_sec * INT64CONST(1000000) + tm->tm_usec, 3)));
         else
           return Float8GetDatum(tm->tm_sec * 1000.0 + tm->tm_usec / 1000.0);
         break;
@@ -5424,8 +5433,8 @@ interval_part_common(Interval *interval, text *units, bool retnumeric)
            * tm->tm_sec + fsec / 1'000'000
            * = (tm->tm_sec * 1'000'000 + fsec) / 1'000'000
            */
-          return NumericGetDatum(int64_div_fast_to_numeric(
-            tm->tm_sec * INT64CONST(1000000) + tm->tm_usec, 6));
+          return RETURN_DATUM(NumericGetDatum(int64_div_fast_to_numeric(
+            tm->tm_sec * INT64CONST(1000000) + tm->tm_usec, 6)));
         else
           return Float8GetDatum(tm->tm_sec + tm->tm_usec / 1000000.0);
         break;
@@ -5529,7 +5538,7 @@ interval_part_common(Interval *interval, text *units, bool retnumeric)
           numeric_add_opt_error(int64_div_fast_to_numeric(interval->time, 6),
             int64_to_numeric(secs_from_day_month), NULL);
 
-      return NumericGetDatum(result);
+      return RETURN_DATUM(NumericGetDatum(result));
     }
     else
     {
@@ -5552,7 +5561,7 @@ interval_part_common(Interval *interval, text *units, bool retnumeric)
 
   pfree(lowunits);
   if (retnumeric)
-    return NumericGetDatum(int64_to_numeric(intresult));
+    return RETURN_DATUM(NumericGetDatum(int64_to_numeric(intresult)));
   else
     return Float8GetDatum(intresult);
 }
@@ -5567,13 +5576,13 @@ interval_part_common(Interval *interval, text *units, bool retnumeric)
 float8
 interval_part(const Interval *interv, const text *units)
 {
-  return interval_part_common(interv, units, false);
+  return RETURN_FLOAT8(interval_part_common(interv, units, false));
 }
 #endif
 float8
 pg_interval_part(const Interval *interv, const text *units)
 {
-  return interval_part_common(interv, units, false);
+  return RETURN_FLOAT8(interval_part_common(interv, units, false));
 }
 
 /**
@@ -5585,7 +5594,7 @@ pg_interval_part(const Interval *interv, const text *units)
 Numeric
 interval_extract(const Interval *interv, const text *units)
 {
-  return interval_part_common(interv, units, true);
+  return (Numeric) DatumGetPointer(NumericGetDatum(interval_part_common(interv, units, true)));
 }
 
 /**

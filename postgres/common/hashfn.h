@@ -3,7 +3,6 @@
  *
  * Portions Copyright (c) 2017-2025, PostgreSQL Global Development Group
  */
-
 #ifndef HASHFN_H
 #define HASHFN_H
 

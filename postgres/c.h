@@ -63,6 +63,17 @@
 #include "pg_config_manual.h"	/* must be after pg_config.h */
 // #include "pg_config_os.h"		/* config from include/port/PORTNAME.h */
 
+/* ----------------------------------------------------------------
+ *  Compatibility macros for standalone build
+ * ---------------------------------------------------------------- */
+#ifndef pg_restrict
+#define pg_restrict restrict
+#endif
+
+#include "nls_stub.h"
+#include "detoast_stub.h"
+#include "backend_stub.h"
+
 /* System header files that should be available everywhere in Postgres */
 #include <inttypes.h>
 #include <stdio.h>
@@ -100,7 +111,6 @@
 
  /* Pull in fundamental symbols that we also expose to applications */
 #include "postgres_ext.h"
-
 /* Define before including zlib.h to add const decorations to zlib API. */
 #ifdef HAVE_LIBZ
 #define ZLIB_CONST
@@ -291,6 +301,8 @@
 /* Otherwise, the best we can do is to say "inline" */
 #define pg_attribute_always_inline inline
 #endif
+
+#define PG_PRINTF_ATTRIBUTE printf
 
 /*
  * Forcing a function not to be inlined can be useful if it's the slow path of
@@ -1178,8 +1190,6 @@ pg_noreturn extern void ExceptionalCondition(const char *conditionName,
 #define ngettext(s,p,n) ((n) == 1 ? (s) : (p))
 #define dngettext(d,s,p,n) ((n) == 1 ? (s) : (p))
 #endif
-
-#define _(x) gettext(x)
 
 /*
  *	Use this to mark string constants as needing translation at some later

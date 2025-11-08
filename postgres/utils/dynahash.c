@@ -95,6 +95,7 @@
 #include <limits.h>
 
 #include "postgres.h"
+#include "c_compat.h"
 #include "common/hashfn.h"
 #include "port/pg_bitutils.h"
 #include "utils/dynahash.h"

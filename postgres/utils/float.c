@@ -24,6 +24,7 @@
 #include "common/int.h"
 #include "common/shortest_dec.h"
 #include "utils/float.h"
+#include "float_compat.h"
 
 #include "utils/date.h"
 #include "utils/datetime.h"
@@ -45,6 +46,8 @@
  * Then we might add up to 8 (from OUT_MIN_DOUBLE) max leading zeroes (or
  * 2 digits for "e+") */
 #define OUT_MAX_DIGITS 17 + 8
+
+
 
 /* Limit for the max amount of characters that a double can use, including dot
  * and sign */
