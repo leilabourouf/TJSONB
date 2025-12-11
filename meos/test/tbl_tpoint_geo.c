@@ -30,18 +30,19 @@
 /**
  * @file
  * @brief A simple program that reads two CSV files, the first one containing
- * temporal circular buffers and the second containing geometries and restricts
- * the temporal circular buffers to the geometries.
+ * temporal points and the second containing geometries and restricts the
+ * temporal point to the geometries.
  *
  * The corresponding SQL query would be
  * @code
- * SELECT numInstants(atGeometry(temp, g))
- * FROM tbl_tcbuffer, tbl_geometry
+ * SELECT t1.k, t2.k, numInstants(atGeometry(temp, g))
+   FROM tbl_tgeompoint t1, tbl_geom t2
+   WHERE atGeometry(temp, g) IS NOT NULL;
  * @endcode
  *
  * The program can be build as follows
  * @code
- * gcc -Wall -g -I/usr/local/include -o tbl_tcbuffer_geometry tbl_tcbuffer_geometry.c -L/usr/local/lib -lmeos
+ * gcc -Wall -g -I/usr/local/include -o tbl_tpoint_geo tbl_tpoint_geo.c -L/usr/local/lib -lmeos
  * @endcode
  */
 
@@ -52,19 +53,19 @@
 #include <meos_cbuffer.h>
 
 /* Maximum length in characters of a header record in the input CSV file1 */
-#define MAX_LENGTH_HEADER 1024
+#define MAX_LEN_HEADER 1024
 /* Maximum length in characters of a geometry in the input data as computed by
  * the following query on the corresponding table
  * SELECT MAX(length(ST_AsHexewkb(g))) FROM tbl_geometry;
  * -- 11572
  */
-#define MAX_LENGTH_GEO 12001
+#define MAX_LEN_GEO 12001
 /* Maximum length in characters of a temporal circular buffer in the input
  * data as computed by the following query on the corresponding table
  * SELECT MAX(length(temp::text)) FROM tbl_tcbuffer;
  * -- 7449
  */
-#define MAX_LENGTH_TCBUFFER 7501
+#define MAX_LEN_TCBUFFER 7501
 
 /* Main program */
 int main(void)
@@ -74,7 +75,7 @@ int main(void)
   meos_initialize_timezone("UTC");
 
   /* You may substitute the full file1 path in the first argument of fopen */
-  FILE *file1 = fopen("data/tbl_tcbuffer.csv", "r");
+  FILE *file1 = fopen("data/tbl_tgeompoint.csv", "r");
 
   if (! file1)
   {
@@ -83,7 +84,8 @@ int main(void)
   }
 
   /* You may substitute the full file1 path in the first argument of fopen */
-  FILE *file2 = fopen("data/tbl_geometry.csv", "r");
+  // FILE *file2 = fopen("data/tbl_geom.csv", "r");
+  FILE *file2 = fopen("data/tbl_geom_point.csv", "r");
 
   if (! file2)
   {
@@ -92,18 +94,19 @@ int main(void)
     return 1;
   }
 
-  char header_buffer[MAX_LENGTH_HEADER];
-  char geo_buffer[MAX_LENGTH_GEO];
-  char tcbuffer_buffer[MAX_LENGTH_TCBUFFER];
+  char header_buffer[MAX_LEN_HEADER];
+  char geo_buffer[MAX_LEN_GEO];
+  char tpoint_buffer[MAX_LEN_TCBUFFER];
 
   /* Read the first line of the first file with the headers */
   fscanf(file1, "%1023s\n", header_buffer);
 
   /* Continue reading the first file */
+  int nrows = 0;
   do
   {
     int k1;
-    int read1 = fscanf(file1, "%d,\"%7500[^\"\n]\"\n", &k1, tcbuffer_buffer);
+    int read1 = fscanf(file1, "%d,%7500[^\n]\n", &k1, tpoint_buffer);
 
     if (ferror(file1) || read1 != 2)
     {
@@ -114,7 +117,7 @@ int main(void)
     }
 
     /* Transform the string read into a tcbuffer value */
-    Temporal *temp = tcbuffer_in(tcbuffer_buffer);
+    Temporal *temp = tgeompoint_in(tpoint_buffer);
 
     /* Rewind the second file to the beginning */
     rewind(file2);
@@ -143,19 +146,28 @@ int main(void)
         /* Transform the string read into a geometry value */
         GSERIALIZED *gs = geom_in(geo_buffer, -1);
 
-        /* Compute the atGeometry function */
-        Temporal *rest = tintersects_tcbuffer_geo(temp, gs, false, false);
-        /* Get the number of instants of the result */
-        int count = rest ? temporal_num_instants(rest): 0;
-        free(rest);
-        free(gs);
+        /* Uncomment the desired function to compute */
+        // Temporal *rest = tintersects_tgeo_geo(temp, gs, false, false);
+        // Temporal *rest = tdwithin_tgeo_geo(temp, gs, 10, false, false);
+        // Temporal *rest = tcontains_tgeo_geo(temp, gs, false, false);
+        Temporal *rest = tdistance_tgeo_geo(temp, gs);
+        if (rest)
+        {
+          /* Get the number of instants of the result */
+          int count = temporal_num_instants(rest);
+          free(rest);
+          free(gs);
 
-        printf("k1: %d, k2: %d: Number of instants of the result: %d\n",
-          k1, k2, count);
+          printf("k1: %d, k2: %d: Number of instants of the result: %d\n",
+            k1, k2, count);
+          nrows++;
+        }
       }
     } while (! feof(file2));
     free(temp);
   } while (! feof(file1));
+
+  printf("Number of non-empty answers: %d\n", nrows);
 
   /* Close the files */
   fclose(file1);

@@ -928,14 +928,14 @@ tdiscseq_restrict_value(const TSequence *seq, Datum value, bool atfunc)
   }
 
   /* General case */
-  const TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
+  TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
   int count = 0;
   for (int i = 0; i < seq->count; i++)
   {
     const TInstant *inst = TSEQUENCE_INST_N(seq, i);
     bool equal = datum_eq(value, tinstant_value_p(inst), basetype);
     if ((atfunc && equal) || (! atfunc && ! equal))
-      instants[count++] = inst;
+      instants[count++] = (TInstant *) inst;
   }
   TSequence *result = (count == 0) ? NULL :
     tsequence_make(instants, count, true, true, DISCRETE, NORMALIZE_NO);
@@ -966,13 +966,13 @@ tdiscseq_restrict_values(const TSequence *seq, const Set *s, bool atfunc)
   }
 
   /* General case */
-  const TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
+  TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
   int newcount = 0;
   for (int i = 0; i < seq->count; i++)
   {
     const TInstant *inst = TSEQUENCE_INST_N(seq, i);
     if (tinstant_restrict_values_test(inst, s, atfunc))
-      instants[newcount++] = inst;
+      instants[newcount++] = (TInstant *) inst;
   }
   TSequence *result = (newcount == 0) ? NULL :
     tsequence_make(instants, newcount, true, true, DISCRETE, NORMALIZE_NO);
@@ -1047,8 +1047,8 @@ tsegment_restrict_value(const TInstant *inst1, const TInstant *inst2,
   {
     instants[0] = (TInstant *) inst1;
     instants[1] = (TInstant *) inst2;
-    result[0] = tsequence_make((const TInstant **) instants, 2,
-      lower_inc && lower, upper_inc && upper, interp, NORMALIZE_NO);
+    result[0] = tsequence_make(instants, 2, lower_inc && lower,
+      upper_inc && upper, interp, NORMALIZE_NO);
     return 1;
   }
 
@@ -1060,8 +1060,8 @@ tsegment_restrict_value(const TInstant *inst1, const TInstant *inst2,
     {
       instants[0] = (TInstant *) inst1;
       instants[1] = tinstant_make(start, inst1->temptype, inst2->t);
-      result[nseqs++] = tsequence_make((const TInstant **) instants, 2,
-        lower_inc, false, STEP, NORMALIZE_NO);
+      result[nseqs++] = tsequence_make(instants, 2, lower_inc, false, STEP,
+        NORMALIZE_NO);
       pfree(instants[1]);
     }
     if (upper_inc && upper)
@@ -1094,8 +1094,8 @@ tsegment_restrict_value(const TInstant *inst1, const TInstant *inst2,
 
       instants[0] = (TInstant *) inst1;
       instants[1] = (TInstant *) inst2;
-      result[0] = tsequence_make((const TInstant **) instants, 2, ! lower_inc,
-        upper_inc, LINEAR, NORMALIZE_NO);
+      result[0] = tsequence_make(instants, 2, ! lower_inc, upper_inc, LINEAR,
+        NORMALIZE_NO);
       return 1;
     }
     else if (t1 == inst2->t)
@@ -1106,20 +1106,20 @@ tsegment_restrict_value(const TInstant *inst1, const TInstant *inst2,
 
       instants[0] = (TInstant *) inst1;
       instants[1] = (TInstant *) inst2;
-      result[0] = tsequence_make((const TInstant **) instants, 2,
-        lower_inc, ! upper_inc, LINEAR, NORMALIZE_NO);
+      result[0] = tsequence_make(instants, 2, lower_inc, ! upper_inc, LINEAR,
+        NORMALIZE_NO);
       return 1;
     }
     else
     {
       instants[0] = (TInstant *) inst1;
       instants[1] = tinstant_make_free(projvalue1, inst1->temptype, t1);
-      result[0] = tsequence_make((const TInstant **) instants, 2, lower_inc,
-        false, LINEAR, NORMALIZE_NO);
+      result[0] = tsequence_make(instants, 2, lower_inc, false, LINEAR,
+        NORMALIZE_NO);
       instants[0] = instants[1];
       instants[1] = (TInstant *) inst2;
-      result[1] = tsequence_make((const TInstant **) instants, 2, false,
-        upper_inc, LINEAR, NORMALIZE_NO);
+      result[1] = tsequence_make(instants, 2, false, upper_inc, LINEAR,
+        NORMALIZE_NO);
       pfree(instants[0]);
       return 2;
     }
@@ -1331,13 +1331,13 @@ tnumberseq_disc_restrict_span(const TSequence *seq, const Span *s, bool atfunc)
     return atfunc ? tsequence_copy(seq) : NULL;
 
   /* General case */
-  const TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
+  TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
   int count = 0;
   for (int i = 0; i < seq->count; i++)
   {
     const TInstant *inst = TSEQUENCE_INST_N(seq, i);
     if (tnumberinst_restrict_span_test(inst, s, atfunc))
-      instants[count++] = inst;
+      instants[count++] = (TInstant *) inst;
   }
   TSequence *result = (count == 0) ? NULL :
     tsequence_make(instants, count, true, true, DISCRETE, NORMALIZE_NO);
@@ -1370,13 +1370,13 @@ tnumberseq_disc_restrict_spanset(const TSequence *seq, const SpanSet *ss,
   }
 
   /* General case */
-  const TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
+  TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
   int newcount = 0;
   for (int i = 0; i < seq->count; i++)
   {
     inst = TSEQUENCE_INST_N(seq, i);
     if (tnumberinst_restrict_spanset_test(inst, ss, atfunc))
-      instants[newcount++] = inst;
+      instants[newcount++] = (TInstant *) inst;
   }
   TSequence *result = (newcount == 0) ? NULL :
     tsequence_make(instants, newcount, true, true, DISCRETE,
@@ -1417,8 +1417,8 @@ tnumbersegm_restrict_span(const TInstant *inst1, const TInstant *inst2,
       return 0;
     instants[0] = (TInstant *) inst1;
     instants[1] = (TInstant *) inst2;
-    result[0] = tsequence_make((const TInstant **) instants, 2, lower_inc,
-      upper_inc, interp, NORMALIZE_NO);
+    result[0] = tsequence_make(instants, 2, lower_inc, upper_inc, interp,
+      NORMALIZE_NO);
     return 1;
   }
 
@@ -1431,8 +1431,8 @@ tnumbersegm_restrict_span(const TInstant *inst1, const TInstant *inst2,
     {
       instants[0] = (TInstant *) inst1;
       instants[1] = tinstant_make(start, inst1->temptype, inst2->t);
-      result[nseqs++] = tsequence_make((const TInstant **) instants, 2,
-        lower_inc, false, interp, NORMALIZE_NO);
+      result[nseqs++] = tsequence_make(instants, 2, lower_inc, false, interp,
+        NORMALIZE_NO);
       pfree(instants[1]);
     }
     found = contains_span_value(s, end);
@@ -1460,8 +1460,8 @@ tnumbersegm_restrict_span(const TInstant *inst1, const TInstant *inst2,
     /* MINUS */
     instants[0] = (TInstant *) inst1;
     instants[1] = (TInstant *) inst2;
-    result[0] = tsequence_make((const TInstant **) instants, 2, lower_inc,
-      upper_inc, interp, NORMALIZE_NO);
+    result[0] = tsequence_make(instants, 2, lower_inc, upper_inc, interp,
+      NORMALIZE_NO);
     return 1;
   }
 
@@ -1475,16 +1475,16 @@ tnumbersegm_restrict_span(const TInstant *inst1, const TInstant *inst2,
       if (atfunc && lower_inc)
       {
         instants[0] = (TInstant *) inst1;
-        result[0] = tsequence_make((const TInstant **) instants, 1,
-            true, true, interp, NORMALIZE_NO);
+        result[0] = tsequence_make(instants, 1, true, true, interp,
+          NORMALIZE_NO);
         return 1;
       }
       else if (! atfunc) /* MINUS */
       {
         instants[0] = (TInstant *) inst1;
         instants[1] = (TInstant *) inst2;
-        result[0] = tsequence_make((const TInstant **) instants, 2,
-            false, upper_inc, interp, NORMALIZE_NO);
+        result[0] = tsequence_make(instants, 2, false, upper_inc, interp,
+          NORMALIZE_NO);
         return 1;
       }
     }
@@ -1493,16 +1493,16 @@ tnumbersegm_restrict_span(const TInstant *inst1, const TInstant *inst2,
       if (atfunc && upper_inc)
       {
         instants[0] = (TInstant *) inst2;
-        result[0] = tsequence_make((const TInstant **) instants, 1, true, true,
-          interp, NORMALIZE_NO);
+        result[0] = tsequence_make(instants, 1, true, true, interp,
+          NORMALIZE_NO);
         return 1;
       }
       else if (! atfunc) /* MINUS */
       {
         instants[0] = (TInstant *) inst1;
         instants[1] = (TInstant *) inst2;
-        result[0] = tsequence_make((const TInstant **) instants, 2, lower_inc,
-          false, interp, NORMALIZE_NO);
+        result[0] = tsequence_make(instants, 2, lower_inc, false, interp,
+          NORMALIZE_NO);
         return 1;
       }
     }
@@ -1514,17 +1514,17 @@ tnumbersegm_restrict_span(const TInstant *inst1, const TInstant *inst2,
       instants[0] = tsegment_at_timestamptz(inst1, inst2, interp, t1);
       if (atfunc)
       {
-        result[0] = tsequence_make((const TInstant **) instants, 1,
-            true, true, interp, NORMALIZE_NO);
+        result[0] = tsequence_make(instants, 1, true, true, interp,
+          NORMALIZE_NO);
         pfree(instants[0]);
         return 1;
       }
       else /* MINUS */
       {
-        result[0] = tsequence_make((const TInstant **) instants, 2,
-            lower_inc, false, interp, NORMALIZE_NO);
-        result[1] = tsequence_make((const TInstant **) instants, 2,
-            false, upper_inc, interp, NORMALIZE_NO);
+        result[0] = tsequence_make(instants, 2, lower_inc, false, interp,
+          NORMALIZE_NO);
+        result[1] = tsequence_make(instants, 2, false, upper_inc, interp,
+          NORMALIZE_NO);
         pfree(instants[0]);
         return 2;
       }
@@ -1608,8 +1608,8 @@ tnumbersegm_restrict_span(const TInstant *inst1, const TInstant *inst2,
       if ((inter1->t == inst1->t && lower_inc) ||
           (inter1->t == inst2->t && upper_inc))
       {
-        result[0] = tsequence_make((const TInstant **) instants, 1, true, true,
-          interp, NORMALIZE_NO);
+        result[0] = tsequence_make(instants, 1, true, true, interp,
+          NORMALIZE_NO);
         res = 1;
       }
       else
@@ -1620,8 +1620,8 @@ tnumbersegm_restrict_span(const TInstant *inst1, const TInstant *inst2,
     }
     /* j > 1 */
     instants[1] = inter2;
-    result[nseqs++] = tsequence_make((const TInstant **) instants, j,
-      lower_inc1, upper_inc1, interp, NORMALIZE_NO);
+    result[nseqs++] = tsequence_make(instants, j, lower_inc1, upper_inc1,
+      interp, NORMALIZE_NO);
     if (tofree1) pfree(tofree1);
     if (tofree2) pfree(tofree2);
     return 1;
@@ -1636,32 +1636,32 @@ tnumbersegm_restrict_span(const TInstant *inst1, const TInstant *inst2,
       if (lower_inc && ! lower_inc1)
       {
         instants[0] = inter1;
-        result[nseqs++] = tsequence_make((const TInstant **) instants, 1,
-            true, true, interp, NORMALIZE_NO);
+        result[nseqs++] = tsequence_make(instants, 1, true, true, interp,
+          NORMALIZE_NO);
       }
     }
     else
     {
       instants[0] = (TInstant *) inst1;
       instants[1] = inter1;
-      result[nseqs++] = tsequence_make((const TInstant **) instants, 2,
-          lower_inc, ! lower_inc1, interp, NORMALIZE_NO);
+      result[nseqs++] = tsequence_make(instants, 2, lower_inc, ! lower_inc1,
+        interp, NORMALIZE_NO);
     }
     /* Second segment if any */
     if (inter2->t < inst2->t)
     {
       instants[0] = (j == 1) ? inter1 : inter2;
       instants[1] = (TInstant *) inst2;
-      result[nseqs++] = tsequence_make((const TInstant **) instants, 2,
-          ! upper_inc1, upper_inc, interp, NORMALIZE_NO);
+      result[nseqs++] = tsequence_make(instants, 2, ! upper_inc1, upper_inc,
+        interp, NORMALIZE_NO);
     }
     else
     {
       if (upper_inc && ! upper_inc1)
       {
         instants[0] = (j == 1) ? inter1 : inter2;
-        result[nseqs++] = tsequence_make((const TInstant **) instants, 1,
-            true, true, interp, NORMALIZE_NO);
+        result[nseqs++] = tsequence_make(instants, 1, true, true, interp,
+          NORMALIZE_NO);
       }
     }
   }
@@ -1979,13 +1979,13 @@ tdiscseq_minus_timestamptz(const TSequence *seq, TimestampTz t)
     return NULL;
 
   /* General case */
-  const TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
+  TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
   int count = 0;
   for (int i = 0; i < seq->count; i++)
   {
     const TInstant *inst = TSEQUENCE_INST_N(seq, i);
     if (inst->t != t)
-      instants[count++] = inst;
+      instants[count++] = (TInstant *) inst;
   }
   TSequence *result = (count == 0) ? NULL :
     tsequence_make(instants, count, true, true, DISCRETE, NORMALIZE_NO);
@@ -2038,7 +2038,7 @@ tdiscseq_restrict_tstzset(const TSequence *seq, const Set *s, bool atfunc)
   }
 
   /* General case */
-  const TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
+  TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
   int i = 0, j = 0, ninsts = 0;
   while (i < seq->count && j < s->count)
   {
@@ -2048,14 +2048,14 @@ tdiscseq_restrict_tstzset(const TSequence *seq, const Set *s, bool atfunc)
     if (cmp == 0)
     {
       if (atfunc)
-        instants[ninsts++] = inst;
+        instants[ninsts++] = (TInstant *) inst;
       i++;
       j++;
     }
     else if (cmp < 0)
     {
       if (! atfunc)
-        instants[ninsts++] = inst;
+        instants[ninsts++] = (TInstant *) inst;
       i++;
     }
     else
@@ -2065,7 +2065,7 @@ tdiscseq_restrict_tstzset(const TSequence *seq, const Set *s, bool atfunc)
   if (! atfunc)
   {
     while (i < seq->count)
-      instants[ninsts++] = TSEQUENCE_INST_N(seq, i++);
+      instants[ninsts++] = (TInstant *) TSEQUENCE_INST_N(seq, i++);
   }
   result = (ninsts == 0) ? NULL : tsequence_make(instants, ninsts, true, true,
     DISCRETE, NORMALIZE_NO);
@@ -2092,14 +2092,14 @@ tdiscseq_restrict_tstzspan(const TSequence *seq, const Span *s, bool atfunc)
     return atfunc ? tsequence_copy(seq) : NULL;
 
   /* General case */
-  const TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
+  TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
   int count = 0;
   for (int i = 0; i < seq->count; i++)
   {
     const TInstant *inst = TSEQUENCE_INST_N(seq, i);
     bool contains = contains_span_timestamptz(s, inst->t);
     if ((atfunc && contains) || (! atfunc && ! contains))
-      instants[count++] = inst;
+      instants[count++] = (TInstant *) inst;
   }
   TSequence *result = (count == 0) ? NULL :
     tsequence_make(instants, count, true, true, DISCRETE, NORMALIZE_NO);
@@ -2137,14 +2137,14 @@ tdiscseq_restrict_tstzspanset(const TSequence *seq, const SpanSet *ss,
   }
 
   /* General case */
-  const TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
+  TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
   int count = 0;
   for (int i = 0; i < seq->count; i++)
   {
     inst = TSEQUENCE_INST_N(seq, i);
     bool contains = contains_spanset_timestamptz(ss, inst->t);
     if ((atfunc && contains) || (! atfunc && ! contains))
-      instants[count++] = inst;
+      instants[count++] = (TInstant *) inst;
   }
   TSequence *result = (count == 0) ? NULL :
     tsequence_make(instants, count, true, true, DISCRETE, NORMALIZE_NO);
@@ -2272,14 +2272,14 @@ tcontseq_minus_timestamp_iter(const TSequence *seq, TimestampTz t,
       if (interp == LINEAR)
       {
         instants[n] = (TInstant *) inst1;
-        result[nseqs++] = tsequence_make((const TInstant **) instants, n + 1,
+        result[nseqs++] = tsequence_make(instants, n + 1,
           seq->period.lower_inc, false, interp, NORMALIZE_NO);
       }
       else
       {
         instants[n] = tinstant_make(tinstant_value_p(instants[n - 1]),
           inst1->temptype, t);
-        result[nseqs++] = tsequence_make((const TInstant **) instants, n + 1,
+        result[nseqs++] = tsequence_make(instants, n + 1,
           seq->period.lower_inc, false, interp, NORMALIZE_NO);
         pfree(instants[n]);
       }
@@ -2291,7 +2291,7 @@ tcontseq_minus_timestamp_iter(const TSequence *seq, TimestampTz t,
       instants[n + 1] = (interp == LINEAR) ?
         tsegment_at_timestamptz(inst1, inst2, interp, t) :
         tinstant_make(tinstant_value_p(inst1), inst1->temptype, t);
-      result[nseqs++] = tsequence_make((const TInstant **) instants, n + 2,
+      result[nseqs++] = tsequence_make(instants, n + 2,
         seq->period.lower_inc, false, interp, NORMALIZE_NO);
       pfree(instants[n + 1]);
     }
@@ -2304,10 +2304,11 @@ tcontseq_minus_timestamp_iter(const TSequence *seq, TimestampTz t,
     instants[0] = tsegment_at_timestamptz(inst1, inst2, interp, t);
     for (i = 1; i < seq->count - n; i++)
       instants[i] = (TInstant *) TSEQUENCE_INST_N(seq, i + n);
-    result[nseqs++] = tsequence_make((const TInstant **) instants,
-      seq->count - n, false, seq->period.upper_inc, interp, NORMALIZE_NO);
+    result[nseqs++] = tsequence_make(instants, seq->count - n, false,
+      seq->period.upper_inc, interp, NORMALIZE_NO);
     pfree(instants[0]);
   }
+  pfree(instants);
   return nseqs;
 }
 
@@ -2325,8 +2326,7 @@ tcontseq_minus_timestamptz(const TSequence *seq, TimestampTz t)
   int count = tcontseq_minus_timestamp_iter(seq, t, sequences);
   if (count == 0)
     return NULL;
-  TSequenceSet *result = tsequenceset_make((const TSequence **) sequences,
-    count, NORMALIZE_NO);
+  TSequenceSet *result = tsequenceset_make(sequences, count, NORMALIZE_NO);
   for (int i = 0; i < count; i++)
     pfree(sequences[i]);
   return result;
@@ -2468,8 +2468,8 @@ tcontseq_minus_tstzset_iter(const TSequence *seq, const Set *s,
           instants[ninsts] = tinstant_make(value, inst->temptype, inst->t);
           tofree[nfree++] = instants[ninsts++];
         }
-        result[nseqs++] = tsequence_make((const TInstant **) instants, ninsts,
-          lower_inc, false, interp, NORMALIZE_NO);
+        result[nseqs++] = tsequence_make(instants, ninsts, lower_inc, false,
+          interp, NORMALIZE_NO);
         ninsts = 0;
       }
       /* If it is not the last instant start a new sequence */
@@ -2499,8 +2499,8 @@ tcontseq_minus_tstzset_iter(const TSequence *seq, const Set *s,
           value = tinstant_value_p(instants[ninsts - 1]);
         instants[ninsts] = tinstant_make(value, inst->temptype, t);
         tofree[nfree] = instants[ninsts++];
-        result[nseqs++] = tsequence_make((const TInstant **) instants, ninsts,
-          lower_inc, false, interp, NORMALIZE_NO);
+        result[nseqs++] = tsequence_make(instants, ninsts, lower_inc, false,
+          interp, NORMALIZE_NO);
         /* Restart a new sequence */
         instants[0] = tofree[nfree++];
         ninsts = 1;
@@ -2517,8 +2517,8 @@ tcontseq_minus_tstzset_iter(const TSequence *seq, const Set *s,
   }
   if (ninsts > 0)
   {
-    result[nseqs++] = tsequence_make((const TInstant **) instants, ninsts,
-      lower_inc, seq->period.upper_inc, interp, NORMALIZE_NO);
+    result[nseqs++] = tsequence_make(instants, ninsts, lower_inc,
+      seq->period.upper_inc, interp, NORMALIZE_NO);
   }
   pfree_array((void **) tofree, nfree);
   pfree(instants);
@@ -2606,8 +2606,8 @@ tcontseq_at_tstzspan(const TSequence *seq, const Span *s)
   }
   /* Since by definition the sequence is normalized it is not necessary to
    * normalize the projection of the sequence to the period */
-  result = tsequence_make((const TInstant **) instants, ninsts,
-    inter.lower_inc, inter.upper_inc, interp, NORMALIZE_NO);
+  result = tsequence_make(instants, ninsts, inter.lower_inc, inter.upper_inc,
+    interp, NORMALIZE_NO);
 
   pfree(instants[0]); pfree(instants[ninsts - 1]); pfree(instants);
 
@@ -2665,8 +2665,7 @@ tcontseq_minus_tstzspan(const TSequence *seq, const Span *s)
   int count = tcontseq_minus_tstzspan_iter(seq, s, sequences);
   if (count == 0)
     return NULL;
-  TSequenceSet *result = tsequenceset_make((const TSequence **) sequences,
-    count, NORMALIZE_NO);
+  TSequenceSet *result = tsequenceset_make(sequences, count, NORMALIZE_NO);
   for (int i = 0; i < count; i++)
     pfree(sequences[i]);
   return result;
@@ -3217,8 +3216,7 @@ tsequenceset_restrict_tstzspan(const TSequenceSet *ss, const Span *s,
     }
     /* Since both the tsequenceset and the period are normalized it is not
      * necessary to normalize the result of the projection */
-    result = tsequenceset_make((const TSequence **) sequences, nseqs,
-      NORMALIZE_NO);
+    result = tsequenceset_make(sequences, nseqs, NORMALIZE_NO);
     for (int i = 0; i < nfree; i++)
       pfree(tofree[i]);
     pfree(sequences);

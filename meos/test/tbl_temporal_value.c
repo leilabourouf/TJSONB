@@ -29,19 +29,20 @@
 
 /**
  * @file
- * @brief A simple program that reads two CSV files containing non-temporal
- * values and applies a function to them.
+ * @brief A simple program that reads two CSV files, the first one containing
+ * temporal values and the second containing non-temporal values and apply
+ * a function to them.
  *
  * The corresponding SQL query would be
  * @code
- * SELECT t1.k, t2.k, array_length(timeSpans(t, i), 1)
-   FROM tbl_tstzspanset t1, tbl_interval t2
-   WHERE timeSpans(t, i) IS NOT NULL;
+ * SELECT t1.k, t2.k, numInstants(atTime(temp, t))
+   FROM tbl_tfloat t1, tbl_tstzspan t2
+   WHERE atTime(temp, t) IS NOT NULL;
  * @endcode
  *
  * The program can be build as follows
  * @code
- * gcc -Wall -g -I/usr/local/include -o tbl_value_value tbl_value_value.c -L/usr/local/lib -lmeos
+ * gcc -Wall -g -I/usr/local/include -o tbl_temporal_value tbl_temporal_value.c -L/usr/local/lib -lmeos
  * @endcode
  */
 
@@ -54,14 +55,19 @@
 #include <meos_pose.h>
 
 /* Maximum length in characters of a header record in the input CSV file1 */
-#define MAX_LENGTH_HEADER 1024
-#define MAX_LENGTH_VALUE 12001
+#define MAX_LEN_HEADER 1024
+/* Maximum length in characters of a geometry in the input data as computed by
+ * the following query on the corresponding table
+ * SELECT MAX(length(ST_AsHexewkb(g))) FROM tbl_geometry;
+ * -- 11572
+ */
+#define MAX_LEN_VALUE 12001
 /* Maximum length in characters of a temporal circular buffer in the input
  * data as computed by the following query on the corresponding table
  * SELECT MAX(length(temp::text)) FROM tbl_tgeometry;
  * -- 6273
  */
-#define MAX_LENGTH_TEMP 8192
+#define MAX_LEN_TEMP 8192
 
 /* Main program */
 int main(void)
@@ -71,19 +77,18 @@ int main(void)
   meos_initialize_timezone("UTC");
 
   /* You may substitute the full file1 path in the first argument of fopen */
-  // FILE *file1 = fopen("csv/tbl_int.csv", "r");
-  // FILE *file1 = fopen("csv/tbl_intset.csv", "r");
-  // FILE *file1 = fopen("csv/tbl_intspan.csv", "r");
-  // FILE *file1 = fopen("csv/tbl_intspanset.csv", "r");
-  // FILE *file1 = fopen("csv/tbl_float.csv", "r");
-  // FILE *file1 = fopen("csv/tbl_floatset.csv", "r");
-  // FILE *file1 = fopen("csv/tbl_floatspan.csv", "r");
-  // FILE *file1 = fopen("csv/tbl_floatspanset.csv", "r");
-  // FILE *file1 = fopen("csv/tbl_interval.csv", "r");
-  // FILE *file1 = fopen("csv/tbl_timestamptz.csv", "r");
-  // FILE *file1 = fopen("csv/tbl_tstzset.csv", "r");
-  // FILE *file1 = fopen("csv/tbl_tstzspan.csv", "r");
-  FILE *file1 = fopen("csv/tbl_tstzspanset.csv", "r");
+  // FILE *file1 = fopen("csv/tbl_tbool.csv", "r");
+  // FILE *file1 = fopen("csv/tbl_tint.csv", "r");
+  // FILE *file1 = fopen("csv/tbl_tfloat.csv", "r");
+  // FILE *file1 = fopen("csv/tbl_ttext.csv", "r");
+  FILE *file1 = fopen("csv/tbl_tgeompoint.csv", "r");
+  // FILE *file1 = fopen("csv/tbl_tgeogpoint.csv", "r");
+  // FILE *file1 = fopen("csv/tbl_tgeometry.csv", "r");
+  // FILE *file1 = fopen("csv/tbl_tgeography.csv", "r");
+  // FILE *file1 = fopen("csv/tbl_tcbuffer.csv", "r");
+  // FILE *file1 = fopen("csv/tbl_tnpoint.csv", "r");
+  // FILE *file1 = fopen("csv/tbl_tpose2d.csv", "r");
+  // FILE *file1 = fopen("csv/tbl_trgeometry.csv", "r");
 
   if (! file1)
   {
@@ -92,10 +97,6 @@ int main(void)
   }
 
   /* You may substitute the full file1 path in the first argument of fopen */
-  // FILE *file2 = fopen("csv/tbl_int.csv", "r");
-  // FILE *file2 = fopen("csv/tbl_intset.csv", "r");
-  // FILE *file2 = fopen("csv/tbl_intspan.csv", "r");
-  // FILE *file2 = fopen("csv/tbl_intspanset.csv", "r"); 
   // FILE *file2 = fopen("csv/tbl_float.csv", "r");
   // FILE *file2 = fopen("csv/tbl_floatset.csv", "r");
   // FILE *file2 = fopen("csv/tbl_floatspan.csv", "r");
@@ -113,9 +114,9 @@ int main(void)
     return 1;
   }
 
-  char header_buffer[MAX_LENGTH_HEADER];
-  char value1_buffer[MAX_LENGTH_VALUE];
-  char value2_buffer[MAX_LENGTH_VALUE];
+  char header_buffer[MAX_LEN_HEADER];
+  char temporal_buffer[MAX_LEN_TEMP];
+  char value_buffer[MAX_LEN_VALUE];
 
   /* Read the first line of the first file with the headers */
   fscanf(file1, "%1023s\n", header_buffer);
@@ -125,7 +126,7 @@ int main(void)
   do
   {
     int k1;
-    int read1 = fscanf(file1, "%d,%8191[^\n]\n", &k1, value1_buffer);
+    int read1 = fscanf(file1, "%d,%8191[^\n]\n", &k1, temporal_buffer);
 
     if (ferror(file1))
     {
@@ -138,19 +139,18 @@ int main(void)
       continue;
 
     /* Transform the string read into a temporal value */
-    // int i = int_in(value1_buffer);
-    // Set *t = intset_in(value1_buffer);
-    // Span *t = intspan_in(value1_buffer);
-    // SpanSet *t = intspanset_in(value1_buffer);
-    // double d = float_in(value1_buffer);
-    // Set *t = floatset_in(value1_buffer);
-    // Span *t = floatspan_in(value1_buffer);
-    // SpanSet *t = floatspanset_in(value1_buffer);
-    // Interval *i = interval_in(value1_buffer, -1);
-    // TimestampTz t = timestamptz_in(value1_buffer, -1);
-    // Set *s = tstzset_in(value1_buffer);
-    // Span *s = tstzspan_in(value1_buffer);
-    SpanSet *ss = tstzspanset_in(value1_buffer);
+    // Temporal *temp = tbool_in(temporal_buffer);
+    // Temporal *temp = tint_in(temporal_buffer);
+    // Temporal *temp = tfloat_in(temporal_buffer);
+    // Temporal *temp = ttext_in(temporal_buffer);
+    Temporal *temp = tgeompoint_in(temporal_buffer);
+    // Temporal *temp = tgeogpoint_in(temporal_buffer);
+    // Temporal *temp = tgeometry_in(temporal_buffer);
+    // Temporal *temp = tgeography_in(temporal_buffer);
+    // Temporal *temp = tcbuffer_in(temporal_buffer);
+    // Temporal *temp = tnpoint_in(temporal_buffer);
+    // Temporal *temp = tpose_in(temporal_buffer);
+    // Temporal *temp = trgeometry_in(temporal_buffer);
 
     /* Rewind the second file to the beginning */
     rewind(file2);
@@ -162,7 +162,7 @@ int main(void)
     {
 
       int k2;
-      int read2 = fscanf(file2, "%d,%12000[^\n]\n", &k2, value2_buffer);
+      int read2 = fscanf(file2, "%d,%12000[^\n]\n", &k2, value_buffer);
 
       if (ferror(file2))
       {
@@ -180,29 +180,22 @@ int main(void)
       {
 
         /* Transform the string read into a value */
-        // int i = int_in(value2_buffer);
-        // Set *t = intset_in(value2_buffer);
-        // Span *t = intspan_in(value2_buffer);
-        // SpanSet *t = intspanset_in(value2_buffer);
-        // double d = float_in(value2_buffer);
-        // Set *t = floatset_in(value2_buffer);
-        // Span *t = floatspan_in(value2_buffer);
-        // SpanSet *t = floatspanset_in(value2_buffer);
-        Interval *i = interval_in(value2_buffer, -1);
-        // TimestampTz t = timestamptz_in(value2_buffer, -1);
-        // Set *s = tstzset_in(value2_buffer);
-        // Span *s = tstzspan_in(value2_buffer);
-        // SpanSet *ss = tstzspanset_in(value2_buffer);
+        Interval *i = interval_in(value_buffer, -1);
+        // double d = float_in(value_buffer);
+        // Set *t = floatset_in(value_buffer);
+        // Span *t = floatspan_in(value_buffer);
+        // SpanSet *t = floatspanset_in(value_buffer);
+        // TimestampTz t = timestamptz_in(value_buffer, -1);
+        // Set *s = tstzset_in(value_buffer);
+        // Span *s = tstzspan_in(value_buffer);
+        // SpanSet *ss = tstzspanset_in(value_buffer);
 
         /* Uncomment the desired function to compute */
-
-        /******************* Restriction functions *******************/
-
         // Temporal *rest = temporal_at_value(temp, t);
         // Temporal *rest = temporal_at_values(temp, t);
         // Temporal *rest = tnumber_at_span(temp, t);
         // Temporal *rest = tnumber_at_spanset(temp, t);
-        // Temporal *rest = temporal_at_timestamptz(temp, t);
+       // Temporal *rest = temporal_at_timestamptz(temp, t);
         // Temporal *rest = temporal_at_tstzset(temp, t);
         // Temporal *rest = temporal_at_tstzspan(temp, t);
         // Temporal *rest = temporal_at_tstzspanset(temp, t);
@@ -211,7 +204,7 @@ int main(void)
 
         TimestampTz origin = timestamptz_in("2000-01-03", -1);
         // Temporal *rest = temporal_tprecision(temp, i, origin);
-        // Temporal *rest = temporal_tsample(temp, i, origin, "Step");
+        Temporal *rest = temporal_tsample(temp, i, origin, "Step");
 
         /******************* Modification functions *******************/
 
@@ -220,16 +213,12 @@ int main(void)
         // Temporal *rest = temporal_delete_tstzspan(temp, s, false);
         // Temporal *rest = temporal_delete_tstzspanset(temp, ss, false);
 
-        /******************* Tile functions *******************/
-
-        int count;
-        Span *result = tstzspanset_bins(ss, i, origin, &count);
-        
-        if (count)
+        if (rest)
         {
           /* Get the number of instants of the result */
-          free(result);
-          printf("k1: %d, k2: %d: Number of elements of the result: %d\n",
+          int count = temporal_num_instants(rest);
+          free(rest);
+          printf("k1: %d, k2: %d: Number of instants of the result: %d\n",
             k1, k2, count);
           nrows++;
         }
@@ -237,7 +226,7 @@ int main(void)
         free(i); 
       }
     } while (! feof(file2));
-    free(ss);
+    free(temp);
   } while (! feof(file1));
 
   printf("Number of non-empty answers: %d\n", nrows);

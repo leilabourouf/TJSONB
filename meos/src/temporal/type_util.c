@@ -630,7 +630,7 @@ timestamptz_sort_cmp(const TimestampTz *l, const TimestampTz *r)
  * @brief Comparator function for temporal instants
  */
 static int
-tinstant_sort_cmp(const TInstant **l, const TInstant **r)
+tinstant_sort_cmp(TInstant **l, TInstant **r)
 {
   return timestamptz_cmp_internal((*l)->t, (*r)->t);
 }
@@ -744,7 +744,7 @@ tstzarr_remove_duplicates(TimestampTz *values, int count)
  * @pre The array has been sorted before
  */
 int
-tinstarr_remove_duplicates(const TInstant **instants, int count)
+tinstarr_remove_duplicates(TInstant **instants, int count)
 {
   assert(count > 0);
   int newcount = 0;

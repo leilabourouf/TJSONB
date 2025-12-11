@@ -35,8 +35,9 @@
  *
  * The corresponding SQL query would be
  * @code
- * SELECT numInstants(tIntersects(temp1, temp2))
- * FROM tbl_tgeometry t1, tbl_tgeometry t2
+ * SELECT t1.k, t2.k, numInstants(tIntersects(t1.temp, t2.temp))
+   FROM tbl_tgeompoint t1, tbl_tgeompoint t2
+   WHERE tIntersects(t1.temp, t2.temp) IS NOT NULL;
  * @endcode
  *
  * The program can be tested with several functions such as spatiotemporal
@@ -45,7 +46,7 @@
  * 
  * The program can be build as follows
  * @code
- * gcc -Wall -g -I/usr/local/include -o tbl_tgeo_tgeo tbl_tgeo_tgeo.c -L/usr/local/lib -lmeos
+ * gcc -Wall -g -I/usr/local/include -o tbl_tpoint_tpoint tbl_tpoint_tpoint.c -L/usr/local/lib -lmeos
  * @endcode
  */
 
@@ -55,13 +56,13 @@
 #include <meos_geo.h>
 
 /* Maximum length in characters of a header record in the input CSV file */
-#define MAX_LENGTH_HEADER 1024
+#define MAX_LEN_HEADER 1024
 /* Maximum length in characters of a temporal circular buffer in the input
  * data as computed by the following query on the corresponding table
- * SELECT MAX(length(temp::text)) FROM tbl_tgeometry;
- * -- 6273
+ * SELECT MAX(length(temp::text)) FROM tbl_tgeompoint;
+ * -- 3770
  */
-#define MAX_LENGTH_TGEO 7501
+#define MAX_LEN_TGEO 7501
 
 /* Main program */
 int main(void)
@@ -71,7 +72,7 @@ int main(void)
   meos_initialize_timezone("UTC");
 
   /* You may substitute the full file path in the first argument of fopen */
-  FILE *file = fopen("data/tbl_tgeometry.csv", "r");
+  FILE *file = fopen("data/tbl_tgeompoint.csv", "r");
 
   if (! file)
   {
@@ -79,8 +80,8 @@ int main(void)
     return 1;
   }
 
-  char header_buffer[MAX_LENGTH_HEADER];
-  char tgeo_buffer[MAX_LENGTH_TGEO];
+  char header_buffer[MAX_LEN_HEADER];
+  char tgeo_buffer[MAX_LEN_TGEO];
 
   int k = 1, k1, k2, nrows = 0;
   do
@@ -118,7 +119,7 @@ int main(void)
     if (true) // (k1 % 10 == 0)
     {
       /* Transform the string read into a tcbuffer value */
-      Temporal *temp1 = tgeometry_in(tgeo_buffer);
+      Temporal *temp1 = tgeompoint_in(tgeo_buffer);
 
       /* Rewind the file to the beginning */
       rewind(file);
@@ -140,12 +141,12 @@ int main(void)
         if (true) // (k2 % 2 == 0)
         {
           /* Transform the string read into a tcbuffer value */
-          Temporal *temp2 = tgeometry_in(tgeo_buffer);
+          Temporal *temp2 = tgeompoint_in(tgeo_buffer);
 
           /* Compute the function, uncomment the desired function */
           // Temporal *rest = tintersects_tgeo_tgeo(temp1, temp2,
             // false, false);
-          Temporal *rest = tdwithin_tgeo_tgeo(temp1, temp2, 10,
+          Temporal *rest = tdwithin_tspatial_tspatial(temp1, temp2, 10,
             false, false);
           // Temporal *rest = tdistance_tgeo_tgeo(temp1, temp2);
           if (rest)

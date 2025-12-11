@@ -92,7 +92,7 @@ npointset_out(const Set *s, int maxdd)
  * @csqlfn #Set_constructor()
  */
 Set *
-npointset_make(const Npoint **values, int count)
+npointset_make(Npoint **values, int count)
 {
   /* Ensure the validity of the arguments */
   VALIDATE_NOT_NULL(values, NULL);
@@ -223,7 +223,7 @@ ensure_valid_set_npoint(const Set *s, const Npoint *np)
  * @csqlfn #Contains_set_value()
  */
 bool
-contains_set_npoint(const Set *s, Npoint *np)
+contains_set_npoint(const Set *s, const Npoint *np)
 {
   /* Ensure the validity of the arguments */
   if (! ensure_valid_set_npoint(s, np))

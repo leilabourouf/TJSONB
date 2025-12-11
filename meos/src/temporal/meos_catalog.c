@@ -1017,7 +1017,8 @@ numspan_basetype(meosType type)
 inline bool
 numspan_type(meosType type)
 {
-  return (type == T_INTSPAN || type == T_BIGINTSPAN || type == T_FLOATSPAN);
+  return (type == T_INTSPAN || type == T_BIGINTSPAN || type == T_FLOATSPAN ||
+    type == T_DATESPAN);
 }
 
 /**

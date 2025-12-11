@@ -362,11 +362,12 @@ extern TimestampTz date_to_timestamptz(DateADT d);
 extern double float_exp(double d);
 extern double float_ln(double d);
 extern double float_log10(double d);
+extern char *float_out(double d, int maxdd);
 extern double float_round(double d, int maxdd);
 extern int int32_cmp(int32 l, int32 r);
 extern int int64_cmp(int64 l, int64 r);
 extern Interval *interval_make(int32 years, int32 months, int32 weeks, int32 days, int32 hours, int32 mins, double secs);
-extern Interval *minus_date_date(DateADT d1, DateADT d2);
+extern int minus_date_date(DateADT d1, DateADT d2);
 extern DateADT minus_date_int(DateADT d, int32 days);
 extern TimestampTz minus_timestamptz_interval(TimestampTz t, const Interval *interv);
 extern Interval *minus_timestamptz_timestamptz(TimestampTz t1, TimestampTz t2);
@@ -383,6 +384,7 @@ extern char *pg_timestamptz_out(TimestampTz t);
 extern char *text2cstring(const text *txt);
 extern int text_cmp(const text *txt1, const text *txt2);
 extern text *text_copy(const text *txt);
+extern text *text_in(const char *str);
 extern text *text_initcap(const text *txt);
 extern text *text_lower(const text *txt);
 extern char *text_out(const text *txt);
@@ -401,6 +403,7 @@ extern DateADT timestamptz_to_date(TimestampTz t);
 
 extern Set *bigintset_in(const char *str);
 extern char *bigintset_out(const Set *set);
+extern Span *bigintspan_expand(const Span *s, int64 value);
 extern Span *bigintspan_in(const char *str);
 extern char *bigintspan_out(const Span *s);
 extern SpanSet *bigintspanset_in(const char *str);
@@ -413,12 +416,14 @@ extern SpanSet *datespanset_in(const char *str);
 extern char *datespanset_out(const SpanSet *ss);
 extern Set *floatset_in(const char *str);
 extern char *floatset_out(const Set *set, int maxdd);
+extern Span *floatspan_expand(const Span *s, double value);
 extern Span *floatspan_in(const char *str);
 extern char *floatspan_out(const Span *s, int maxdd);
 extern SpanSet *floatspanset_in(const char *str);
 extern char *floatspanset_out(const SpanSet *ss, int maxdd);
 extern Set *intset_in(const char *str);
 extern char *intset_out(const Set *set);
+extern Span *intspan_expand(const Span *s, int32 value);
 extern Span *intspan_in(const char *str);
 extern char *intspan_out(const Span *s);
 extern SpanSet *intspanset_in(const char *str);
@@ -460,6 +465,7 @@ extern Set *set_copy(const Set *s);
 extern Span *span_copy(const Span *s);
 extern SpanSet *spanset_copy(const SpanSet *ss);
 extern SpanSet *spanset_make(Span *spans, int count);
+extern Set *textset_make(text **values, int count);
 extern Set *tstzset_make(const TimestampTz *values, int count);
 extern Span *tstzspan_make(TimestampTz lower, TimestampTz upper, bool lower_inc, bool upper_inc);
 
@@ -613,7 +619,6 @@ extern SpanSet *floatspanset_shift_scale(const SpanSet *ss, double shift, double
 extern Set *intset_shift_scale(const Set *s, int shift, int width, bool hasshift, bool haswidth);
 extern Span *intspan_shift_scale(const Span *s, int shift, int width, bool hasshift, bool haswidth);
 extern SpanSet *intspanset_shift_scale(const SpanSet *ss, int shift, int width, bool hasshift, bool haswidth);
-extern Span *numspan_expand(const Span *s, Datum value);
 extern Span *tstzspan_expand(const Span *s, const Interval *interv);
 extern Set *set_round(const Set *s, int maxdd);
 extern Set *textcat_text_textset(const text *txt, const Set *s);
@@ -1125,6 +1130,8 @@ extern TBox *timestamptz_to_tbox(TimestampTz t);
  * Accessor functions for box types
  *****************************************************************************/
 
+extern uint32 tbox_hash(const TBox *box);
+extern uint64 tbox_hash_extended(const TBox *box, uint64 seed);
 extern bool tbox_hast(const TBox *box);
 extern bool tbox_hasx(const TBox *box);
 extern bool tbox_tmax(const TBox *box, TimestampTz *result);
@@ -1144,13 +1151,13 @@ extern bool tboxint_xmin(const TBox *box, int *result);
  * Transformation functions for box types
  *****************************************************************************/
 
-extern TBox *tbox_expand_float(const TBox *box, double d);
-extern TBox *tbox_expand_int(const TBox *box, int i);
 extern TBox *tbox_expand_time(const TBox *box, const Interval *interv);
 extern TBox *tbox_round(const TBox *box, int maxdd);
-extern TBox *tbox_shift_scale_float(const TBox *box, double shift, double width, bool hasshift, bool haswidth);
-extern TBox *tbox_shift_scale_int(const TBox *box, int shift, int width, bool hasshift, bool haswidth);
 extern TBox *tbox_shift_scale_time(const TBox *box, const Interval *shift, const Interval *duration);
+extern TBox *tfloatbox_expand(const TBox *box, double d);
+extern TBox *tfloatbox_shift_scale(const TBox *box, double shift, double width, bool hasshift, bool haswidth);
+extern TBox *tintbox_expand(const TBox *box, int i);
+extern TBox *tintbox_shift_scale(const TBox *box, int shift, int width, bool hasshift, bool haswidth);
 
 /*****************************************************************************
  * Set functions for box types
@@ -1242,9 +1249,9 @@ extern TInstant *tintinst_make(int i, TimestampTz t);
 extern TSequence *tintseq_from_base_tstzset(int i, const Set *s);
 extern TSequence *tintseq_from_base_tstzspan(int i, const Span *s);
 extern TSequenceSet *tintseqset_from_base_tstzspanset(int i, const SpanSet *ss);
-extern TSequence *tsequence_make(const TInstant **instants, int count, bool lower_inc, bool upper_inc, interpType interp, bool normalize);
-extern TSequenceSet *tsequenceset_make(const TSequence **sequences, int count, bool normalize);
-extern TSequenceSet *tsequenceset_make_gaps(const TInstant **instants, int count, interpType interp, const Interval *maxt, double maxdist);
+extern TSequence *tsequence_make(TInstant **instants, int count, bool lower_inc, bool upper_inc, interpType interp, bool normalize);
+extern TSequenceSet *tsequenceset_make(TSequence **sequences, int count, bool normalize);
+extern TSequenceSet *tsequenceset_make_gaps(TInstant **instants, int count, interpType interp, const Interval *maxt, double maxdist);
 extern Temporal *ttext_from_base_temp(const text *txt, const Temporal *temp);
 extern TInstant *ttextinst_make(const text *txt, TimestampTz t);
 extern TSequence *ttextseq_from_base_tstzset(const text *txt, const Set *s);
@@ -1329,7 +1336,7 @@ extern text **ttext_values(const Temporal *temp, int *count);
  *****************************************************************************/
 
 extern double float_degrees(double value, bool normalize);
-extern Temporal **temparr_round(const Temporal **temp, int count, int maxdd);
+extern Temporal **temparr_round(Temporal **temp, int count, int maxdd);
 extern Temporal *temporal_round(const Temporal *temp, int maxdd);
 extern Temporal *temporal_scale_time(const Temporal *temp, const Interval *duration);
 extern Temporal *temporal_set_interp(const Temporal *temp, interpType interp);
@@ -1361,7 +1368,7 @@ extern Temporal *temporal_delete_tstzspan(const Temporal *temp, const Span *s, b
 extern Temporal *temporal_delete_tstzspanset(const Temporal *temp, const SpanSet *ss, bool connect);
 extern Temporal *temporal_insert(const Temporal *temp1, const Temporal *temp2, bool connect);
 extern Temporal *temporal_merge(const Temporal *temp1, const Temporal *temp2);
-extern Temporal *temporal_merge_array(const Temporal **temparr, int count);
+extern Temporal *temporal_merge_array(Temporal **temparr, int count);
 extern Temporal *temporal_update(const Temporal *temp1, const Temporal *temp2, bool connect);
 
 /*****************************************************************************

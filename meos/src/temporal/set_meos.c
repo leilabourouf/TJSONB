@@ -302,7 +302,7 @@ floatset_make(const double *values, int count)
  * @csqlfn #Set_constructor()
  */
 Set *
-textset_make(const text **values, int count)
+textset_make(text **values, int count)
 {
   /* Ensure the validity of the arguments */
   VALIDATE_NOT_NULL(values, NULL);
@@ -881,7 +881,7 @@ textcat_text_textset(const text *txt, const Set *s)
 {
   /* Ensure the validity of the arguments */
   VALIDATE_TEXTSET(s, NULL); VALIDATE_NOT_NULL(txt, NULL);
-  return textcat_textset_text_int(s, txt, INVERT);
+  return textcat_textset_text_common(s, txt, INVERT);
 }
 
 /**
@@ -896,7 +896,7 @@ textcat_textset_text(const Set *s, const text *txt)
 {
   /* Ensure the validity of the arguments */
   VALIDATE_TEXTSET(s, NULL); VALIDATE_NOT_NULL(txt, NULL);
-  return textcat_textset_text_int(s, txt, INVERT_NO);
+  return textcat_textset_text_common(s, txt, INVERT_NO);
 }
 
 /*****************************************************************************/

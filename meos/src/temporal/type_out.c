@@ -96,6 +96,26 @@ size_t lwgeom_to_wkb_size(const LWGEOM *geom, uint8_t variant);
 
 /**
  * @ingroup meos_base_types
+ * @brief Return the string representation of a float8 number
+ * @details This function uses the PostGIS function lwprint_double to print an
+ * ordinate value using at most **maxdd** number of decimal digits. The actual 
+ * number of printed decimal digits may be less than the requested ones if out 
+ * of significant digits.
+ *
+ * The function will write at most OUT_DOUBLE_BUFFER_SIZE bytes, including the
+ * terminating NULL.
+ */
+char *
+float_out(double num, int maxdd)
+{
+  assert(maxdd >= 0);
+  char *ascii = palloc(OUT_DOUBLE_BUFFER_SIZE);
+  lwprint_double(num, maxdd, ascii);
+  return ascii;
+}
+
+/**
+ * @ingroup meos_base_types
  * @brief Return the string representation of a text value
  * @param[in] txt Text
  */
@@ -659,7 +679,7 @@ tsequence_as_mfjson_sb(stringbuffer_t *sb, const TSequence *seq,
       /* Do not repeat the crs for the composing geometries */
       char *str = geo_as_geojson(gs, 0, precision, NULL);
       stringbuffer_aprintf(sb, "%s", str);
-      // pfree(str);
+      pfree(str);
     }
 #if POSE
     else if (inst->temptype == T_TPOSE)
@@ -1151,7 +1171,7 @@ stbox_to_wkb_size(const STBox *box, uint8_t variant)
  * in the Well-Known Binary (WKB) representation
  */
 static size_t
-tinstarr_to_wkb_size(const TInstant **instants, int count, uint8_t variant)
+tinstarr_to_wkb_size(TInstant **instants, int count, uint8_t variant)
 {
   size_t result = 0;
   meosType basetype = temptype_basetype(instants[0]->temptype);
@@ -1179,7 +1199,7 @@ tinstant_to_wkb_size(const TInstant *inst, uint8_t variant)
       spatial_wkb_needs_srid(tspatial_srid((Temporal *) inst), variant))
     result += MEOS_WKB_INT4_SIZE;
   /* TInstant */
-  result += tinstarr_to_wkb_size(&inst, 1, variant);
+  result += tinstarr_to_wkb_size((TInstant **) &inst, 1, variant);
   return result;
 }
 
@@ -1200,7 +1220,7 @@ tsequence_to_wkb_size(const TSequence *seq, uint8_t variant)
   result += MEOS_WKB_INT4_SIZE + MEOS_WKB_BYTE_SIZE;
   const TInstant **instants = tsequence_insts_p(seq);
   /* Include the TInstant array */
-  result += tinstarr_to_wkb_size(instants, seq->count, variant);
+  result += tinstarr_to_wkb_size((TInstant **) instants, seq->count, variant);
   pfree(instants);
   return result;
 }
@@ -1224,7 +1244,8 @@ tsequenceset_to_wkb_size(const TSequenceSet *ss, uint8_t variant)
   result += ss->count * (MEOS_WKB_INT4_SIZE + MEOS_WKB_BYTE_SIZE);
   /* Include all the instants of all the sequences */
   const TInstant **instants = tsequenceset_insts_p(ss);
-  result += tinstarr_to_wkb_size(instants, ss->totalcount, variant);
+  result += tinstarr_to_wkb_size((TInstant **) instants, ss->totalcount,
+    variant);
   pfree(instants);
   return result;
 }

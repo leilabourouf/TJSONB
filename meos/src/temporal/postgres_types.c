@@ -896,18 +896,19 @@ minus_date_int(DateADT d, int32 days)
  * @ingroup meos_base_types
  * @brief Return the subtraction of two dates
  * @param[in] d1,d2 Dates
+ * @return On error return @p INT_MAX
  * @note PostgreSQL function: @p date_mi(PG_FUNCTION_ARGS)
  */
-Interval *
+int
 minus_date_date(DateADT d1, DateADT d2)
 {
   if (DATE_NOT_FINITE(d1) || DATE_NOT_FINITE(d2))
+  {
     meos_error(ERROR, MEOS_ERR_VALUE_OUT_OF_RANGE,
       "cannot subtract infinite dates");
-
-  Interval *result = palloc0(sizeof(Interval));
-  result->day = (int32) (d1 - d2);
-  return result;
+    return INT_MAX;
+  }
+  return ((int32) (d1 - d2));
 }
 
 /*****************************************************************************/
@@ -2067,9 +2068,10 @@ minus_timestamptz_timestamptz(TimestampTz t1, TimestampTz t2)
  * @brief Negate an interval.
  * @note The PostgreSQL function @p interval_um_internal is declared static
  */
-void
-interval_negate(const Interval *interval, Interval *result)
+Interval *
+interval_negate(const Interval *interval)
 {
+  Interval *result = (Interval *) palloc(sizeof(Interval));
   if (INTERVAL_IS_NOBEGIN(interval))
     INTERVAL_NOEND(result);
   else if (INTERVAL_IS_NOEND(interval))
@@ -2078,11 +2080,15 @@ interval_negate(const Interval *interval, Interval *result)
   {
     /* Negate each field, guarding against overflow */
     if (pg_sub_s64_overflow(INT64CONST(0), interval->time, &result->time) ||
-      pg_sub_s32_overflow(0, interval->day, &result->day) ||
-      pg_sub_s32_overflow(0, interval->month, &result->month) ||
-      INTERVAL_NOT_FINITE(result))
+        pg_sub_s32_overflow(0, interval->day, &result->day) ||
+        pg_sub_s32_overflow(0, interval->month, &result->month) ||
+        INTERVAL_NOT_FINITE(result))
+    {
       meos_error(ERROR, MEOS_ERR_VALUE_OUT_OF_RANGE, "Interval out of range");
+      return NULL;
+    }
   }
+  return result;
 }
 
 /*****************************************************************************/
@@ -2284,6 +2290,18 @@ text2cstring(const text *txt)
 }
 
 #if MEOS
+/**
+ * @ingroup meos_base_text
+ * @brief Return a text from its string representation
+ * @note Derived from PostgreSQL function @p textin()
+ */
+text *
+text_in(const char *str)
+{
+  assert(str);
+  return cstring2text((char *) str);
+}
+
 /**
  * @brief Simplified version of the function in varlena.c where
  * LC_COLLATE is C

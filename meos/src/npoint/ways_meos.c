@@ -51,7 +51,7 @@
  *****************************************************************************/
 
 /* Maximum length in characters of a geometry string in the input data */
-#define MAX_LENGTH_GEOM 100001
+#define MAX_LEN_GEOM 100001
 
 /* Location of the ways CSV file */
 // #define WAYS_CSV "/usr/local/share/ways.csv"
@@ -246,7 +246,7 @@ get_ways_record(int64 rid, ways_record *rec)
   /* Continue reading the file */
   do
   {
-    char geo_buffer[MAX_LENGTH_GEOM];
+    char geo_buffer[MAX_LEN_GEOM];
     int read = fscanf(file, "%ld,%100000s\n", &rec->gid, geo_buffer);
     if (ferror(file))
     {
@@ -256,7 +256,7 @@ get_ways_record(int64 rid, ways_record *rec)
     }
 
     /* Ignore the records with NULL values or empty geometries */
-    if (read == 2)
+    if (read == 2 && rid == rec->gid)
     {
       /* Transform the geometry string into a geometry value */
       rec->the_geom = geom_in(geo_buffer, -1);
@@ -331,7 +331,7 @@ route_exists(int64 rid)
  * @param[in] rid Route identifier
  * @return On error return @p NULL
  */
-GSERIALIZED *
+const GSERIALIZED *
 route_geom(int64 rid)
 {
   ways_record rec;
@@ -400,9 +400,11 @@ geompoint_to_npoint(const GSERIALIZED *gs)
   ways_record rec;
   /* Minimum distance */
   double min_dist = DBL_MAX;
+  /* Geometry with the shortest distance */
+  GSERIALIZED *the_geom = NULL;
   /* Position in the geometry with the shortest distance */
   double pos = 0;
-  /* Continue reading the file */
+  /* Read the file */
   do
   {
     /* We need to reproduce the following SQL query for a given geometry geo
@@ -411,7 +413,7 @@ geompoint_to_npoint(const GSERIALIZED *gs)
      *   ORDER BY ST_Distance(the_geom, geo) LIMIT 1;
      */
     /* Buffer for reading the geometry string */
-    char geo_buffer[MAX_LENGTH_GEOM];
+    char geo_buffer[MAX_LEN_GEOM];
     int read = fscanf(file, "%ld,%100000s\n", &rec.gid, geo_buffer);
     if (ferror(file))
     {
@@ -441,7 +443,15 @@ geompoint_to_npoint(const GSERIALIZED *gs)
       /* Compute minimal distance */
       double dist = geom_distance2d(rec.the_geom, gs);
       if (dist < min_dist)
+      {
         min_dist = dist;
+        /* Previous previous candidate to shortest distance */
+        if (the_geom)
+          free(the_geom);
+        the_geom = rec.the_geom;
+      }
+      else
+        free(rec.the_geom);
     }
   } while (! feof(file));
 
@@ -453,7 +463,7 @@ geompoint_to_npoint(const GSERIALIZED *gs)
     return NULL;
 
   Npoint *result = npoint_make(rec.gid, pos);
-  free(rec.the_geom);
+  free(the_geom);
   return result;
 }
 

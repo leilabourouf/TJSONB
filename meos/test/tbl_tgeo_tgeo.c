@@ -36,16 +36,16 @@
  * The corresponding SQL query would be
  * @code
  * SELECT numInstants(tIntersects(temp1, temp2))
- * FROM tbl_tcbuffer t1, tbl_tcbuffer t2
+ * FROM tbl_tgeometry t1, tbl_tgeometry t2
  * @endcode
  *
- * The program can be tested with several predicates such as spatiotemporal
+ * The program can be tested with several functions such as spatiotemporal
  * relationships `eIntersects`, `eDwithin`, ..., `aIntersects`, `aDwithin`,
  * ..., `tIntersects`, `tDwithin`, ..., temporal `distance` ...
  * 
  * The program can be build as follows
  * @code
- * gcc -Wall -g -I/usr/local/include -o tbl_tcbuffer_tcbuffer tbl_tcbuffer_tcbuffer.c -L/usr/local/lib -lmeos
+ * gcc -Wall -g -I/usr/local/include -o tbl_tgeo_tgeo tbl_tgeo_tgeo.c -L/usr/local/lib -lmeos
  * @endcode
  */
 
@@ -53,16 +53,15 @@
 #include <stdlib.h>
 #include <meos.h>
 #include <meos_geo.h>
-#include <meos_cbuffer.h>
 
 /* Maximum length in characters of a header record in the input CSV file */
-#define MAX_LENGTH_HEADER 1024
+#define MAX_LEN_HEADER 1024
 /* Maximum length in characters of a temporal circular buffer in the input
  * data as computed by the following query on the corresponding table
- * SELECT MAX(length(temp::text)) FROM tbl_tcbuffer;
- * -- 7449
+ * SELECT MAX(length(temp::text)) FROM tbl_tgeometry;
+ * -- 6273
  */
-#define MAX_LENGTH_TCBUFFER 7501
+#define MAX_LEN_TGEO 7501
 
 /* Main program */
 int main(void)
@@ -72,7 +71,7 @@ int main(void)
   meos_initialize_timezone("UTC");
 
   /* You may substitute the full file path in the first argument of fopen */
-  FILE *file = fopen("data/tbl_tcbuffer.csv", "r");
+  FILE *file = fopen("data/tbl_tgeometry.csv", "r");
 
   if (! file)
   {
@@ -80,8 +79,8 @@ int main(void)
     return 1;
   }
 
-  char header_buffer[MAX_LENGTH_HEADER];
-  char tcbuffer_buffer[MAX_LENGTH_TCBUFFER];
+  char header_buffer[MAX_LEN_HEADER];
+  char tgeo_buffer[MAX_LEN_TGEO];
 
   int k = 1, k1, k2, nrows = 0;
   do
@@ -98,7 +97,7 @@ int main(void)
     /* Continue reading the file until the like identified by the key `k` */
     do
     {
-      int read1 = fscanf(file, "%d,\"%7500[^\"\n]\"\n", &k1, tcbuffer_buffer);
+      int read1 = fscanf(file, "%d,%7500[^\n]\n", &k1, tgeo_buffer);
       if (ferror(file) || read1 != 2)
       {
         printf("Error reading input file\n");
@@ -119,7 +118,7 @@ int main(void)
     if (true) // (k1 % 10 == 0)
     {
       /* Transform the string read into a tcbuffer value */
-      Temporal *temp1 = tcbuffer_in(tcbuffer_buffer);
+      Temporal *temp1 = tgeometry_in(tgeo_buffer);
 
       /* Rewind the file to the beginning */
       rewind(file);
@@ -129,7 +128,7 @@ int main(void)
       /* For each line in the file loop for every line in the second file */
       do
       {
-        int read2 = fscanf(file, "%d,\"%7500[^\"\n]\"\n", &k2, tcbuffer_buffer);
+        int read2 = fscanf(file, "%d,%7500[^\n]\n", &k2, tgeo_buffer);
         if (ferror(file) || read2 != 2)
         {
           printf("Error reading input file2\n");
@@ -141,14 +140,14 @@ int main(void)
         if (true) // (k2 % 2 == 0)
         {
           /* Transform the string read into a tcbuffer value */
-          Temporal *temp2 = tcbuffer_in(tcbuffer_buffer);
+          Temporal *temp2 = tgeometry_in(tgeo_buffer);
 
           /* Compute the function, uncomment the desired function */
-          // Temporal *rest = tintersects_tcbuffer_tcbuffer(temp1, temp2,
+          // Temporal *rest = tintersects_tgeo_tgeo(temp1, temp2,
             // false, false);
-          // Temporal *rest = tdwithin_tcbuffer_tcbuffer(temp1, temp2, 10,
-            // false, false);
-          Temporal *rest = tdistance_tcbuffer_tcbuffer(temp1, temp2);
+          Temporal *rest = tdwithin_tgeo_tgeo(temp1, temp2, 10,
+            false, false);
+          // Temporal *rest = tdistance_tgeo_tgeo(temp1, temp2);
           if (rest)
           {
             /* Increment the number of non-empty answers found */

@@ -152,7 +152,7 @@ extern double nsegment_start_position(const Nsegment *ns);
 /* Route functions */
 
 extern bool route_exists(int64 rid);
-extern GSERIALIZED *route_geom(int64 rid);
+extern const GSERIALIZED *route_geom(int64 rid);
 extern double route_length(int64 rid);
 
 /* Transformation functions */
@@ -200,7 +200,7 @@ extern char *npointset_out(const Set *s, int maxdd);
 
 /* Constructor functions */
 
-extern Set *npointset_make(const Npoint **values, int count);
+extern Set *npointset_make(Npoint **values, int count);
 
 /* Conversion functions */
 
@@ -217,7 +217,7 @@ extern Npoint **npointset_values(const Set *s);
 /* Set operations */
 
 extern bool contained_npoint_set(const Npoint *np, const Set *s);
-extern bool contains_set_npoint(const Set *s, Npoint *np);
+extern bool contains_set_npoint(const Set *s, const Npoint *np);
 extern Set *intersection_npoint_set(const Npoint *np, const Set *s);
 extern Set *intersection_set_npoint(const Set *s, const Npoint *np);
 extern Set *minus_npoint_set(const Npoint *np, const Set *s);
