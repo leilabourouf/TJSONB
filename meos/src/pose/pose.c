@@ -37,6 +37,7 @@
 #include <limits.h>
 /* Postgres */
 #include <postgres.h>
+#include <pgtypes.h>
 #if POSTGRESQL_VERSION_NUMBER >= 160000
   #include "varatt.h"
 #endif
@@ -47,7 +48,7 @@
 #include <meos_pose.h>
 #include <meos_internal.h>
 #include <meos_internal_geo.h>
-#include "temporal/postgres_types.h"
+#include <pgtypes.h>
 #include "temporal/set.h"
 #include "temporal/tsequence.h"
 #include "temporal/type_inout.h"
@@ -358,7 +359,7 @@ pose_parse(const char **str, bool end)
   GSERIALIZED *geo = NULL;
   if (strncasecmp(*str,"POSE",4) != 0)
   {
-    if (! geo_parse(str, T_GEOMETRY, ',', &srid_geo, &geo))
+    if (! geo_parse(str, T_GEOMETRY, ",", &srid_geo, &geo))
       return NULL;
   }
 
@@ -382,7 +383,7 @@ pose_parse(const char **str, bool end)
   /* Parse geo */
   p_whitespace(str);
   GSERIALIZED *point;
-  if (! geo_parse(str, T_GEOMETRY, ',', &srid, &point))
+  if (! geo_parse(str, T_GEOMETRY, ",", &srid, &point))
     return NULL;
   if (! ensure_point_type(point) || ! ensure_not_empty(point) ||
       ! ensure_has_not_M_geo(point))
@@ -952,20 +953,20 @@ pose_round(const Pose *pose, int maxdd)
   Pose *result;
   if (MEOS_FLAGS_GET_Z(pose->flags))
   {
-    double x = float_round(pose->data[0], maxdd);
-    double y = float_round(pose->data[1], maxdd);
-    double z = float_round(pose->data[2], maxdd);
-    double W = float_round(pose->data[3], maxdd);
-    double X = float_round(pose->data[4], maxdd);
-    double Y = float_round(pose->data[5], maxdd);
-    double Z = float_round(pose->data[6], maxdd);
+    double x = float8_round(pose->data[0], maxdd);
+    double y = float8_round(pose->data[1], maxdd);
+    double z = float8_round(pose->data[2], maxdd);
+    double W = float8_round(pose->data[3], maxdd);
+    double X = float8_round(pose->data[4], maxdd);
+    double Y = float8_round(pose->data[5], maxdd);
+    double Z = float8_round(pose->data[6], maxdd);
     result = pose_make_3d(x, y, z, W, X, Y, Z, pose_srid(pose));
   }
   else
   {
-    double x = float_round(pose->data[0], maxdd);
-    double y = float_round(pose->data[1], maxdd);
-    double theta = float_round(pose->data[2], maxdd);
+    double x = float8_round(pose->data[0], maxdd);
+    double y = float8_round(pose->data[1], maxdd);
+    double theta = float8_round(pose->data[2], maxdd);
     result = pose_make_2d(x, y, theta, pose_srid(pose));
   }
   return result;
@@ -993,7 +994,7 @@ datum_pose_round(Datum pose, Datum size)
  * @csqlfn #Posearr_round()
  */
 Pose **
-posearr_round(const Pose **posearr, int count, int maxdd)
+posearr_round(Pose **posearr, int count, int maxdd)
 {
   /* Ensure the validity of the arguments */
   VALIDATE_NOT_NULL(posearr, NULL);
@@ -1021,7 +1022,7 @@ pose_srid(const Pose *pose)
   /* Ensure the validity of the arguments */
   VALIDATE_NOT_NULL(pose, SRID_INVALID);
 
-  int32 srid = 0;
+  int32_t srid = 0;
   srid = srid | (pose->srid[0] << 16);
   srid = srid | (pose->srid[1] << 8);
   srid = srid | (pose->srid[2]);
@@ -1161,7 +1162,7 @@ pose_transform_pipeline(const Pose *pose, const char *pipeline,
  *****************************************************************************/
 
 /**
- * @brief Return the distance between the two poses
+ * @brief Return the distance between two poses
  */
 Datum
 pose_distance(Datum pose1, Datum pose2)
@@ -1289,7 +1290,8 @@ pose_ne(const Pose *pose1, const Pose *pose2)
 
 /**
  * @ingroup meos_pose_base_comp
- * @brief Return true if the first pose is equal to the second one
+ * @brief Return true if the first pose is equal to the second one up to an
+ * epsilon value
  * @param[in] pose1,pose2 Poses
  */
 bool
@@ -1318,7 +1320,8 @@ pose_same(const Pose *pose1, const Pose *pose2)
 
 /**
  * @ingroup meos_pose_base_comp
- * @brief Return true if the first pose is not equal to the second one
+ * @brief Return true if the first pose is not equal to the second one up to an
+ * epsilon value
  * @param[in] pose1,pose2 Poses
  */
 inline bool
@@ -1346,7 +1349,7 @@ pose_cmp(const Pose *pose1, const Pose *pose2)
   if (hasz1 != hasz2)
     return (hasz1 ? 1 : -1);
 
-  int32 srid1 = pose_srid(pose1),
+  int32_t srid1 = pose_srid(pose1),
         srid2 = pose_srid(pose2);
   if (srid1 < srid2)
     return -1;
@@ -1422,7 +1425,7 @@ void hashlittle2(const void *key, size_t length, uint32_t *pc, uint32_t *pb);
  * @brief Return the 32-bit hash value of a pose
  * @param[in] pose Pose
  */
-uint32
+uint32_t
 pose_hash(const Pose *pose)
 {
   /* Ensure the validity of the arguments */
@@ -1459,8 +1462,8 @@ pose_hash(const Pose *pose)
  * @param[in] seed Seed
  * csqlfn hash_extended
  */
-uint64
-pose_hash_extended(const Pose *pose, uint64 seed)
+uint64_t
+pose_hash_extended(const Pose *pose, uint64_t seed)
 {
   /* PostGIS currently does not provide an extended hash function, */
   return DatumGetUInt64(hash_any_extended(

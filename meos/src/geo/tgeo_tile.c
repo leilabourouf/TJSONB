@@ -500,14 +500,14 @@ stbox_tile_state_make(const Temporal *temp, const STBox *box, double xsize,
  */
 void
 stbox_tile_state_set(double x, double y, double z, TimestampTz t, double xsize,
-  double ysize, double zsize, int64 tunits, bool hasx, bool hasz, bool hast,
-  int32 srid, STBox *result)
+  double ysize, double zsize, int64_t tunits, bool hasx, bool hasz, bool hast,
+  int32_t srid, STBox *result)
 {
   assert(hasx || hast);
 
   /* Initialize to 0 the missing dimensions */
   double xmin = 0, xmax = 0, ymin = 0, ymax = 0, zmin = 0, zmax = 0;
-  Span p;
+  Span sp;
   if (hasx)
   {
     xmin = x;
@@ -523,10 +523,10 @@ stbox_tile_state_set(double x, double y, double z, TimestampTz t, double xsize,
   if (hast)
   {
     span_set(TimestampTzGetDatum(t), TimestampTzGetDatum(t + tunits), true,
-      false, T_TIMESTAMPTZ, T_TSTZSPAN, &p);
+      false, T_TIMESTAMPTZ, T_TSTZSPAN, &sp);
   }
   stbox_set(hasx, hasz, false, srid, xmin, xmax, ymin, ymax, zmin, zmax,
-    hast ? &p : NULL, result);
+    hast ? &sp : NULL, result);
   return;
 }
 
@@ -667,12 +667,12 @@ stbox_space_time_tiles(const STBox *bounds, double xsize, double ysize,
    * Since we pass by default Point(0 0 0) as origin independently of the input
    * STBox, we test the same spatial dimensionality only for STBox Z */
   VALIDATE_NOT_NULL(bounds, NULL); VALIDATE_NOT_NULL(count, NULL);
-  VALIDATE_NOT_NULL(sorigin, NULL);
   if (! ensure_has_X(T_STBOX, bounds->flags) ||
       ! ensure_not_geodetic(bounds->flags) ||
       ! ensure_not_negative_datum(Float8GetDatum(xsize), T_FLOAT8) ||
       ! ensure_not_negative_datum(Float8GetDatum(ysize), T_FLOAT8) ||
-      ! ensure_not_empty(sorigin) || ! ensure_point_type(sorigin) ||
+      (sorigin && 
+        (! ensure_not_empty(sorigin) || ! ensure_point_type(sorigin))) ||
       (MEOS_FLAGS_GET_Z(bounds->flags) &&
         (! ensure_not_negative_datum(Float8GetDatum(zsize), T_FLOAT8) ||
          ! ensure_same_spatial_dimensionality_stbox_geo(bounds, sorigin))) ||
@@ -680,29 +680,35 @@ stbox_space_time_tiles(const STBox *bounds, double xsize, double ysize,
         (! ensure_has_T(T_STBOX, bounds->flags) ||
          ! ensure_positive_duration(duration))))
       return NULL;
-  int32 srid = bounds->srid;
-  int32 gs_srid = gserialized_get_srid(sorigin);
-  if (gs_srid != SRID_UNKNOWN && ! ensure_same_srid(srid, gs_srid))
-    return NULL;
+  if (sorigin)
+  {    
+    int32_t srid = bounds->srid;
+    int32_t gs_srid = gserialized_get_srid(sorigin);
+    if (gs_srid != SRID_UNKNOWN && ! ensure_same_srid(srid, gs_srid))
+      return NULL;
+  }
 
   POINT3DZ pt;
   memset(&pt, 0, sizeof(POINT3DZ));
-  if (FLAGS_GET_Z(sorigin->gflags))
+  if (sorigin)
   {
-    const POINT3DZ *p3d = GSERIALIZED_POINT3DZ_P(sorigin);
-    pt.x = p3d->x;
-    pt.y = p3d->y;
-    pt.z = p3d->z;
-  }
-  else
-  {
-    /* Initialize to 0 the Z dimension if it is missing */
-    const POINT2D *p2d = GSERIALIZED_POINT2D_P(sorigin);
-    pt.x = p2d->x;
-    pt.y = p2d->y;
-    /* Since when zsize is not given we pass by default xsize, if the box does
-     * not have Z dimension we set zsize to 0 */
-    zsize = 0;
+    if (sorigin && FLAGS_GET_Z(sorigin->gflags))
+    {
+      const POINT3DZ *p3d = GSERIALIZED_POINT3DZ_P(sorigin);
+      pt.x = p3d->x;
+      pt.y = p3d->y;
+      pt.z = p3d->z;
+    }
+    else
+    {
+      /* Initialize to 0 the Z dimension if it is missing */
+      const POINT2D *p2d = GSERIALIZED_POINT2D_P(sorigin);
+      pt.x = p2d->x;
+      pt.y = p2d->y;
+      /* Since when zsize is not given we pass by default xsize, if the box does
+       * not have Z dimension we set zsize to 0 */
+      zsize = 0;
+    }
   }
 
   STboxGridState *state = stbox_tile_state_make(NULL, bounds, xsize, ysize,
@@ -829,9 +835,9 @@ stbox_space_time_tile(const GSERIALIZED *point, TimestampTz t,
   /* Initialize to 0 missing dimensions */
   double xmin = 0, ymin = 0, zmin = 0;
   bool hasz = false;
-  int64 tunits = hast ? interval_units(duration) : 0;
-  int32 srid = hasx ? gserialized_get_srid(point) : SRID_UNKNOWN;
-  int32 gs_srid = hasx ? gserialized_get_srid(sorigin) : SRID_UNKNOWN;
+  int64_t tunits = hast ? interval_units(duration) : 0;
+  int32_t srid = hasx ? gserialized_get_srid(point) : SRID_UNKNOWN;
+  int32_t gs_srid = hasx ? gserialized_get_srid(sorigin) : SRID_UNKNOWN;
   if (gs_srid != SRID_UNKNOWN)
     ensure_same_srid(srid, gs_srid);
   POINT3DZ pt, ptorig;
@@ -942,7 +948,7 @@ stbox_get_time_tile(TimestampTz t, const Interval *duration,
  * @param[in] border_inc True when the box contains the upper border, otherwise
  * the upper border is assumed as outside of the box.
  * @param[out] count Number of elements in the output array
- * @csqlfn #Tgeo_space_time_boxes_ext
+ * @csqlfn #Tgeo_space_time_boxes_common
  */
 STBox *
 tgeo_space_time_boxes(const Temporal *temp, double xsize, double ysize,
@@ -1101,14 +1107,14 @@ tpointinst_get_coords_fpos(const TInstant *inst, bool hasz, bool hast,
   const STboxGridState *state, int *coords, double *fpos)
 {
   /* Read the point and compute the minimum values of the tile */
-  POINT4D p;
-  datum_point4d(tinstant_value_p(inst), &p);
-  double x = float_get_bin(p.x, state->xsize, state->box.xmin);
-  double y = float_get_bin(p.y, state->ysize, state->box.ymin);
+  POINT4D pt;
+  datum_point4d(tinstant_value_p(inst), &pt);
+  double x = float_get_bin(pt.x, state->xsize, state->box.xmin);
+  double y = float_get_bin(pt.y, state->ysize, state->box.ymin);
   double z = 0;
   TimestampTz t = 0;
   if (hasz)
-    z = float_get_bin(p.z, state->zsize, state->box.zmin);
+    z = float_get_bin(pt.z, state->zsize, state->box.zmin);
   if (hast)
     t = timestamptz_bin_start(inst->t, state->tunits,
       DatumGetTimestampTz(state->box.period.lower));
@@ -1116,7 +1122,7 @@ tpointinst_get_coords_fpos(const TInstant *inst, bool hasz, bool hast,
   tile_get_coords(x, y, z, t, state, coords);
   /* Transform the values in a tile into relative positions in matrix cells */
   if (fpos) /* Some methods do not need this information */
-    tile_get_fpos(p.x - x, p.y - y, p.z - z, inst->t - t, state, fpos);
+    tile_get_fpos(pt.x - x, pt.y - y, pt.z - z, inst->t - t, state, fpos);
   return;
 }
 
@@ -1354,7 +1360,7 @@ tgeo_space_time_tile_init(const Temporal *temp, double xsize, double ysize,
  * @param[out] time_bins Array of time bins
  * @param[out] count Number of elements in the output arrays
  * @note This function in MEOS corresponds to the MobilityDB function
- * #Tgeo_space_time_split_ext. Note that the test for the validity of the
+ * #Tgeo_space_time_split_common. Note that the test for the validity of the
  * arguments is done in #tgeo_space_time_tile_init
  */
 Temporal **

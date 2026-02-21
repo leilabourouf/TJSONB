@@ -57,21 +57,20 @@
 
 extern size_t temporal_bbox_size(meosType tempype);
 extern void tinstant_set_bbox(const TInstant *inst, void *bbox);
-extern void tinstarr_set_bbox(const TInstant **instants, int count,
+extern void tinstarr_set_bbox(TInstant **instants, int count,
   bool lower_inc, bool upper_inc, interpType interp, void *bbox);
 extern void tsequence_compute_bbox(TSequence *seq);
-extern void tseqarr_compute_bbox(const TSequence **seqs, int count,
-  void *bbox);
+extern void tseqarr_compute_bbox(TSequence **sequences, int count, void *bbox);
 extern void tsequenceset_compute_bbox(TSequenceSet *ss);
 
 /* Bounding box operators for temporal types */
 
-extern bool boxop_temporal_tstzspan(const Temporal *temp, const Span *s,
+extern bool boxop_temporal_tstzspan(const Temporal *temp, const Span *sp,
   bool (*func)(const Span *, const Span *), bool invert);
 extern bool boxop_temporal_temporal(const Temporal *temp1,
   const Temporal *temp2, bool (*func)(const Span *, const Span *));
 
-extern bool boxop_tnumber_numspan(const Temporal *temp, const Span *span,
+extern bool boxop_tnumber_numspan(const Temporal *temp, const Span *sp,
   bool (*func)(const Span *, const Span *), bool invert);
 extern bool boxop_tnumber_tbox(const Temporal *temp, const TBox *box,
   bool (*func)(const TBox *, const TBox *), bool invert);

@@ -36,11 +36,17 @@
 
 /* C */
 #include <assert.h>
+/* PostgreSQL */
+#include <postgres.h>
 /* MEOS */
 #include <meos.h>
 #include <meos_internal.h>
 #include "temporal/doublen.h"
 #include "temporal/type_util.h"
+
+#include <utils/jsonb.h>
+#include <utils/numeric.h>
+#include <pgtypes.h>
 
 /*****************************************************************************
  * Generic functions
@@ -58,10 +64,10 @@ tinstant_extend(const TInstant *inst, const Interval *interv,
   TSequence **result)
 {
   TInstant *instants[2];
-  TimestampTz upper = add_timestamptz_interval(inst->t, interv);
+  TimestampTz upper = add_timestamptz_interval(inst->t, (Interval *) interv);
   instants[0] = (TInstant *) inst;
   instants[1] = tinstant_make(tinstant_value_p(inst), inst->temptype, upper);
-  result[0] = tsequence_make((const TInstant **) instants, 2, true, true,
+  result[0] = tsequence_make(instants, 2, true, true,
     MEOS_FLAGS_GET_CONTINUOUS(inst->flags) ? LINEAR : STEP, NORMALIZE_NO);
   pfree(instants[1]);
   return 1;
@@ -118,11 +124,11 @@ tcontseq_extend(const TSequence *seq, const Interval *interv, bool min,
     /* Step interpolation or constant segment */
     if (interp != LINEAR || datum_eq(value1, value2, basetype))
     {
-      TimestampTz upper = add_timestamptz_interval(inst2->t, interv);
+      TimestampTz upper = add_timestamptz_interval(inst2->t, (Interval *) interv);
       instants[0] = (TInstant *) inst1;
       instants[1] = tinstant_make(value1, inst1->temptype, upper);
-      result[i] = tsequence_make((const TInstant **) instants, 2,
-        lower_inc, upper_inc, interp, NORMALIZE_NO);
+      result[i] = tsequence_make(instants, 2, lower_inc, upper_inc, interp,
+        NORMALIZE_NO);
       pfree(instants[1]);
     }
     else
@@ -133,25 +139,25 @@ tcontseq_extend(const TSequence *seq, const Interval *interv, bool min,
         (datum_gt(value1, value2, basetype) && ! min))
       {
         /* Extend a start value for the duration of the window */
-        TimestampTz lower = add_timestamptz_interval(inst1->t, interv);
-        TimestampTz upper = add_timestamptz_interval(inst2->t, interv);
+        TimestampTz lower = add_timestamptz_interval(inst1->t, (Interval *) interv);
+        TimestampTz upper = add_timestamptz_interval(inst2->t, (Interval *) interv);
         instants[0] = inst1;
         instants[1] = tinstant_make(value1, inst1->temptype, lower);
         instants[2] = tinstant_make(value2, inst1->temptype, upper);
-        result[i] = tsequence_make((const TInstant **) instants, 3,
-          lower_inc, upper_inc, interp, NORMALIZE_NO);
+        result[i] = tsequence_make(instants, 3, lower_inc, upper_inc, interp,
+          NORMALIZE_NO);
         pfree(instants[1]); pfree(instants[2]);
       }
       else
       {
         /* Extend a end value for the duration of the window */
         TimestampTz upper = add_timestamptz_interval(seq->period.upper,
-          interv);
+          (Interval *) interv);
         instants[0] = inst1;
         instants[1] = inst2;
         instants[2] = tinstant_make(value2, inst1->temptype, upper);
-        result[i] = tsequence_make((const TInstant**) instants, 3,
-          lower_inc, upper_inc, interp, NORMALIZE_NO);
+        result[i] = tsequence_make(instants, 3, lower_inc, upper_inc, interp,
+          NORMALIZE_NO);
         pfree(instants[2]);
       }
     }
@@ -236,11 +242,11 @@ tinstant_transform_wcount_iter(TimestampTz lower, TimestampTz upper,
   bool lower_inc, bool upper_inc, const Interval *interv)
 {
   TInstant *instants[2];
-  TimestampTz upper1 = add_timestamptz_interval(upper, interv);
+  TimestampTz upper1 = add_timestamptz_interval(upper, (Interval *) interv);
   instants[0] = tinstant_make(Int32GetDatum(1), T_TINT, lower);
   instants[1] = tinstant_make(Int32GetDatum(1), T_TINT, upper1);
-  TSequence *result = tsequence_make((const TInstant **) instants, 2,
-    lower_inc, upper_inc, STEP, NORMALIZE_NO);
+  TSequence *result = tsequence_make(instants, 2, lower_inc, upper_inc, STEP,
+    NORMALIZE_NO);
   pfree(instants[0]); pfree(instants[1]);
   return result;
 }
@@ -380,7 +386,7 @@ tnumberinst_transform_wavg(const TInstant *inst, const Interval *interv,
   TSequence **result)
 {
   /* TODO: Should be an additional attribute */
-  float8 value = 0.0;
+  double value = 0.0;
   assert(tnumber_type(inst->temptype));
   if (inst->temptype == T_TINT)
     value = DatumGetInt32(tinstant_value_p(inst));
@@ -388,11 +394,11 @@ tnumberinst_transform_wavg(const TInstant *inst, const Interval *interv,
     value = DatumGetFloat8(tinstant_value_p(inst));
   double2 dvalue;
   double2_set(value, 1, &dvalue);
-  TimestampTz upper = add_timestamptz_interval(inst->t, interv);
+  TimestampTz upper = add_timestamptz_interval(inst->t, (Interval *) interv);
   TInstant *instants[2];
   instants[0] = tinstant_make(PointerGetDatum(&dvalue), T_TDOUBLE2, inst->t);
   instants[1] = tinstant_make(PointerGetDatum(&dvalue), T_TDOUBLE2, upper);
-  result[0] = tsequence_make((const TInstant**) instants, 2, true, true,
+  result[0] = tsequence_make(instants, 2, true, true,
     MEOS_FLAGS_GET_CONTINUOUS(inst->flags) ? LINEAR : STEP, NORMALIZE_NO);
   pfree(instants[0]); pfree(instants[1]);
   return 1;
@@ -449,11 +455,11 @@ tintseq_transform_wavg(const TSequence *seq, const Interval *interv,
     double value = DatumGetInt32(tinstant_value_p(inst1));
     double2 dvalue;
     double2_set(value, 1, &dvalue);
-    TimestampTz upper = add_timestamptz_interval(inst2->t, interv);
+    TimestampTz upper = add_timestamptz_interval(inst2->t, (Interval *) interv);
     instants[0] = tinstant_make(PointerGetDatum(&dvalue), T_TDOUBLE2, inst1->t);
     instants[1] = tinstant_make(PointerGetDatum(&dvalue), T_TDOUBLE2, upper);
-    result[i] = tsequence_make((const TInstant **) instants, 2, lower_inc,
-      upper_inc, STEP, NORMALIZE_NO);
+    result[i] = tsequence_make(instants, 2, lower_inc, upper_inc, STEP,
+      NORMALIZE_NO);
     pfree(instants[0]); pfree(instants[1]);
     inst1 = inst2;
     lower_inc = true;

@@ -37,12 +37,15 @@
 /* MEOS */
 #include <meos.h>
 #include <meos_internal.h>
-#include "temporal/postgres_types.h"
 #include "temporal/lifting.h"
 #include "temporal/temporal.h"
 #include "temporal/temporal_compops.h"
 #include "temporal/type_util.h"
 #include "geo/tgeo_spatialfuncs.h"
+
+#include <utils/jsonb.h>
+#include <utils/numeric.h>
+#include <pgtypes.h>
 
 /*****************************************************************************
  * Ever/always comparisons
@@ -299,7 +302,7 @@ teq_geo_tgeo(const GSERIALIZED *gs, const Temporal *temp)
 
 /**
  * @ingroup meos_geo_comp_temp
- * @brief Return the temporal inequality of a geo and a temporal geo
+ * @brief Return the temporal difference of a geo and a temporal geo
  * @param[in] gs Geo
  * @param[in] temp Temporal geo
  * @csqlfn #Tne_geo_tgeo()
@@ -327,7 +330,7 @@ teq_tgeo_geo(const Temporal *temp, const GSERIALIZED *gs)
 
 /**
  * @ingroup meos_geo_comp_temp
- * @brief Return the temporal inequality of a temporal geo and a geo
+ * @brief Return the temporal difference of a temporal geo and a geo
  * @param[in] temp Temporal geo
  * @param[in] gs Geo
  * @csqlfn #Tne_tgeo_geo()

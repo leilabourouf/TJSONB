@@ -37,6 +37,7 @@
 
 /* PostgreSQL */
 #include <postgres.h>
+#include <pgtypes.h>
 #include <access/heaptoast.h>
 #include <access/detoast.h>
 #include <funcapi.h>
@@ -69,7 +70,7 @@ Set_in(PG_FUNCTION_ARGS)
 {
   const char *input = PG_GETARG_CSTRING(0);
   Oid typid = PG_GETARG_OID(1);
-  PG_RETURN_SET_P(set_in(input, oid_type(typid)));
+  PG_RETURN_SET_P(set_in(input, oid_meostype(typid)));
 }
 
 PGDLLEXPORT Datum Set_out(PG_FUNCTION_ARGS);
@@ -143,7 +144,7 @@ Set_as_text(PG_FUNCTION_ARGS)
   if (PG_NARGS() > 1 && ! PG_ARGISNULL(1))
     dbl_dig_for_wkt = PG_GETARG_INT32(1);
   char *str = set_out(s, dbl_dig_for_wkt);
-  text *result = cstring2text(str);
+  text *result = pg_cstring_to_text(str);
   pfree(str);
   PG_FREE_IF_COPY(s, 0);
   PG_RETURN_TEXT_P(result);
@@ -180,7 +181,7 @@ Datum
 Set_from_hexwkb(PG_FUNCTION_ARGS)
 {
   text *hexwkb_text = PG_GETARG_TEXT_P(0);
-  char *hexwkb = text2cstring(hexwkb_text);
+  char *hexwkb = pg_text_to_cstring(hexwkb_text);
   Set *result = set_from_hexwkb(hexwkb);
   pfree(hexwkb);
   PG_FREE_IF_COPY(hexwkb_text, 0);
@@ -201,7 +202,7 @@ Set_as_wkb(PG_FUNCTION_ARGS)
 {
   /* Ensure that the value is detoasted if necessary */
   Set *s = PG_GETARG_SET_P(0);
-  meosType settype = oid_type(get_fn_expr_argtype(fcinfo->flinfo, 0));
+  meosType settype = oid_meostype(get_fn_expr_argtype(fcinfo->flinfo, 0));
   bytea *result = Datum_as_wkb(fcinfo, PointerGetDatum(s), settype, true);
   PG_FREE_IF_COPY(s, 0);
   PG_RETURN_BYTEA_P(result);
@@ -220,7 +221,7 @@ Set_as_hexwkb(PG_FUNCTION_ARGS)
 {
   /* Ensure that the value is detoasted if necessary */
   Set *s = PG_GETARG_SET_P(0);
-  meosType settype = oid_type(get_fn_expr_argtype(fcinfo->flinfo, 0));
+  meosType settype = oid_meostype(get_fn_expr_argtype(fcinfo->flinfo, 0));
   text *result = Datum_as_hexwkb(fcinfo, PointerGetDatum(s), settype);
   PG_FREE_IF_COPY(s, 0);
   PG_RETURN_TEXT_P(result);
@@ -242,7 +243,7 @@ Set_constructor(PG_FUNCTION_ARGS)
 {
   ArrayType *array = PG_GETARG_ARRAYTYPE_P(0);
   ensure_not_empty_array(array);
-  meosType settype = oid_type(get_fn_expr_rettype(fcinfo->flinfo));
+  meosType settype = oid_meostype(get_fn_expr_rettype(fcinfo->flinfo));
   meosType basetype = settype_basetype(settype);
   int count;
   Datum *values = datumarr_extract(array, &count);
@@ -266,7 +267,7 @@ Datum
 Value_to_set(PG_FUNCTION_ARGS)
 {
   Datum d = PG_GETARG_DATUM(0);
-  meosType basetype = oid_type(get_fn_expr_argtype(fcinfo->flinfo, 0));
+  meosType basetype = oid_meostype(get_fn_expr_argtype(fcinfo->flinfo, 0));
   /* Detoast the value if necessary */
   if (basetype_varlength(basetype))
     d = PointerGetDatum(PG_DETOAST_DATUM(d));
@@ -431,7 +432,7 @@ PGDLLEXPORT Datum Set_values(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(Set_values);
 /**
  * @ingroup mobilitydb_setspan_accessor
- * @brief Return the array of values of a set
+ * @brief Return an array of (copies of the) values of a set
  * @sqlfn getValues()
  */
 Datum
@@ -698,7 +699,7 @@ Textcat_text_textset(PG_FUNCTION_ARGS)
 {
   text *txt = PG_GETARG_TEXT_P(0);
   Set *s = PG_GETARG_SET_P(1);
-  Set *result = textcat_textset_text_int(s, txt, INVERT);
+  Set *result = textcat_textset_text_common(s, txt, INVERT);
   PG_FREE_IF_COPY(txt, 0);
   PG_FREE_IF_COPY(s, 1);
   PG_RETURN_SET_P(result);
@@ -716,7 +717,7 @@ Textcat_textset_text(PG_FUNCTION_ARGS)
 {
   Set *s = PG_GETARG_SET_P(0);
   text *txt = PG_GETARG_TEXT_P(1);
-  Set *result = textcat_textset_text_int(s, txt, INVERT_NO);
+  Set *result = textcat_textset_text_common(s, txt, INVERT_NO);
   PG_FREE_IF_COPY(s, 0);
   PG_FREE_IF_COPY(txt, 1);
   PG_RETURN_SET_P(result);
@@ -946,8 +947,8 @@ Datum
 Set_hash_extended(PG_FUNCTION_ARGS)
 {
   Set *s = PG_GETARG_SET_P(0);
-  uint64 seed = PG_GETARG_INT64(1);
-  uint64 result = set_hash_extended(s, seed);
+  uint64_t seed = PG_GETARG_INT64(1);
+  uint64_t result = set_hash_extended(s, seed);
   PG_FREE_IF_COPY(s, 0);
   PG_RETURN_UINT64(result);
 }

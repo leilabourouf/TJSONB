@@ -68,12 +68,12 @@
  *****************************************************************************/
 
 /**
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a geometry satisfy a spatial relationship
  * @param[in] temp Temporal circular buffer
  * @param[in] gs Geometry
  * @param[in] restr True when the result is restricted to a value
- * @param[in] invert True if the arguments should be inverted
+ * @param[in] invert True if the arguments must be inverted
  * @param[in] atvalue Value to restrict
  * @param[in] func Spatial relationship function to be applied
  */
@@ -106,7 +106,7 @@ tspatialrel_tcbuffer_geo(const Temporal *temp, const GSERIALIZED *gs,
 }
 
 /**
- * @brief Return a temporal Boolean that states whether two temporal circular
+ * @brief Return a temporal boolean that states whether two temporal circular
  * buffers satisfy a spatial relationship
  * @param[in] temp1,temp2 Temporal circular buffers
  * @param[in] restr True when the result is restricted to a value
@@ -122,8 +122,8 @@ tspatialrel_tcbuffer_tcbuffer(const Temporal *temp1, const Temporal *temp2,
   if (! ensure_valid_tcbuffer_tcbuffer(temp1, temp2))
     return NULL;
 
-  Temporal *result = tspatialrel_tspatial_tspatial_int(temp1, temp2,
-    (Datum) NULL, (varfunc) func, 0, INVERT_NO);
+  Temporal *result = tspatialrel_tspatial_tspatial(temp1, temp2, (Datum) NULL,
+    (varfunc) func, 0, INVERT_NO);
 
   /* Restrict the result to the Boolean value in the last argument if any */
   if (result && restr)
@@ -141,7 +141,7 @@ tspatialrel_tcbuffer_tcbuffer(const Temporal *temp1, const Temporal *temp2,
  *****************************************************************************/
 
 /**
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer instant and a geometry intersect or are disjoint
  * @param[in] inst Temporal circular buffer
  * @param[in] gs Geometry
@@ -166,7 +166,7 @@ tinterrel_tcbufferinst_geom(const TInstant *inst, const GSERIALIZED *gs,
 }
 
 /**
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer sequence with discrete interpolation and a geometry intersect or are
  * disjoint
  * @param[in] seq Temporal circular buffer
@@ -255,7 +255,7 @@ tinterrel_tcbufferseq_disc_geom(const TSequence *seq, const GSERIALIZED *gs,
 }
 
 /**
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer sequence with step interpolation and a geometry intersect or are
  * disjoint
  * @param[in] seq Temporal circular buffer
@@ -368,7 +368,7 @@ tinterrel_tcbufferseq_step_geom(const TSequence *seq, const GSERIALIZED *gs,
 }
 
 /**
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer sequence with linear interpolation and a geometry intersect
  * @param[in] seq Temporal circular buffer
  * @param[in] gs Geometry
@@ -466,7 +466,7 @@ tinterrel_tcbufferseq_linear_geom(const TSequence *seq, const GSERIALIZED *gs,
 }
 
 /**
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer sequence and a geometry intersect (dispatch function)
  * @param[in] seq Temporal circular buffer
  * @param[in] gs Geometry
@@ -494,7 +494,7 @@ tinterrel_tcbufferseq_geom(const TSequence *seq, const GSERIALIZED *gs,
 }
 
 /**
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer sequence set and a geometry intersect (dispatch function)
  * @param[in] ss Temporal circular buffer
  * @param[in] gs Geometry
@@ -537,13 +537,13 @@ tinterrel_tcbufferseqset_geom(const TSequenceSet *ss, const GSERIALIZED *gs,
     pfree(res_seq);
     return result;
   }
-  result = temporal_merge_array((const Temporal **) res_seq, count);
+  result = temporal_merge_array(res_seq, count);
   pfree_array((void *) res_seq, count);
   return result;
 }
 
 /**
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a geometry intersect or are disjoint
  * @param[in] temp Temporal circular buffer
  * @param[in] gs Geometry
@@ -604,7 +604,7 @@ tinterrel_tcbuffer_geo(const Temporal *temp, const GSERIALIZED *gs,
 /*****************************************************************************/
 
 /**
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a geometry intersect or are disjoint
  * @param[in] temp Temporal circular buffer
  * @param[in] cb Circular buffer
@@ -620,8 +620,10 @@ tinterrel_tcbuffer_cbuffer(const Temporal *temp, const Cbuffer *cb,
   /* Ensure the validity of the arguments */
   if (! ensure_valid_tcbuffer_cbuffer(temp, cb))
     return NULL;
-  return tinterrel_tspatial_base(temp, PointerGetDatum(cb), tinter, restr,
-    atvalue, tinter ? &datum_cbuffer_intersects : &datum_cbuffer_disjoint);
+  GSERIALIZED *geo = cbuffer_to_geom(cb);
+  Temporal *result = tinterrel_tcbuffer_geo(temp, geo, tinter, restr, atvalue);
+  pfree(geo);
+  return result;
 }
 
 /*****************************************************************************
@@ -636,7 +638,7 @@ tinterrel_tcbuffer_cbuffer(const Temporal *temp, const Cbuffer *cb,
  * @param[in] param Parameter
  * @param[in] func Spatial relationship function to be applied
  * @param[in] numparam Number of parameters of the function
- * @param[in] invert True if the arguments should be inverted
+ * @param[in] invert True if the arguments must be inverted
  * @return On error return `NULL`
  */
 static Temporal *
@@ -648,24 +650,22 @@ tspatialrel_tcbuffer_cbuffer_int(const Temporal *temp, const Cbuffer *cb,
   LiftedFunctionInfo lfinfo;
   memset(&lfinfo, 0, sizeof(LiftedFunctionInfo));
   lfinfo.func = func;
+  lfinfo.argtype[0] = T_TCBUFFER;
+  lfinfo.argtype[1] = T_CBUFFER;
   lfinfo.numparam = numparam;
   lfinfo.param[0] = param;
-  lfinfo.argtype[0] = temp->temptype;
-  lfinfo.argtype[1] = temptype_basetype(temp->temptype);
   lfinfo.restype = T_TBOOL;
-  lfinfo.reslinear = false;
   lfinfo.invert = invert;
-  lfinfo.discont = false;
   return tfunc_temporal_base(temp, PointerGetDatum(cb), &lfinfo);
 }
 
 /**
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a geometry satisfy a spatial relationship
  * @param[in] temp Temporal circular buffer
  * @param[in] cb Circular buffer
  * @param[in] restr True when the result is restricted to a value
- * @param[in] invert True if the arguments should be inverted
+ * @param[in] invert True if the arguments must be inverted
  * @param[in] atvalue Value to restrict
  * @param[in] func Spatial relationship function to be applied
  */
@@ -697,7 +697,7 @@ tspatialrel_tcbuffer_cbuffer(const Temporal *temp, const Cbuffer *cb, bool restr
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a geometry contains a
+ * @brief Return a temporal boolean that states whether a geometry contains a
  * temporal circular buffer
  * @param[in] gs Geometry
  * @param[in] temp Temporal circular buffer
@@ -715,7 +715,7 @@ tcontains_geo_tcbuffer(const GSERIALIZED *gs, const Temporal *temp, bool restr,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer contains a geometry
  * @param[in] temp Temporal circular buffer
  * @param[in] gs Geometry
@@ -735,7 +735,7 @@ tcontains_tcbuffer_geo(const Temporal *temp, const GSERIALIZED *gs, bool restr,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a circular buffer
+ * @brief Return a temporal boolean that states whether a circular buffer
  * contains a temporal circular buffer
  * @param[in] cb Circular buffer
  * @param[in] temp Temporal circular buffer
@@ -767,7 +767,7 @@ tcontains_cbuffer_tcbuffer(const Cbuffer *cb, const Temporal *temp, bool restr,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer contains a geometry
  * @param[in] temp Temporal circular buffer
  * @param[in] cb Circular buffer
@@ -799,7 +799,7 @@ tcontains_tcbuffer_cbuffer(const Temporal *temp, const Cbuffer *cb, bool restr,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer contains another one
  * @param[in] temp1,temp2 Temporal circular buffers
  * @param[in] restr True when the result is restricted to a value
@@ -820,7 +820,7 @@ tcontains_tcbuffer_tcbuffer(const Temporal *temp1, const Temporal *temp2,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a geometry covers a
+ * @brief Return a temporal boolean that states whether a geometry covers a
  * temporal circular buffer
  * @param[in] gs Geometry
  * @param[in] temp Temporal circular buffer
@@ -838,7 +838,7 @@ tcovers_geo_tcbuffer(const GSERIALIZED *gs, const Temporal *temp, bool restr,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer covers a geometry
  * @param[in] temp Temporal circular buffer
  * @param[in] gs Geometry
@@ -858,7 +858,7 @@ tcovers_tcbuffer_geo(const Temporal *temp, const GSERIALIZED *gs, bool restr,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a circular buffer
+ * @brief Return a temporal boolean that states whether a circular buffer
  * covers a temporal circular buffer
  * @param[in] cb Circular buffer
  * @param[in] temp Temporal circular buffer
@@ -876,7 +876,7 @@ tcovers_cbuffer_tcbuffer(const Cbuffer *cb, const Temporal *temp, bool restr,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer covers a geometry
  * @param[in] temp Temporal circular buffer
  * @param[in] cb Circular buffer
@@ -894,7 +894,7 @@ tcovers_tcbuffer_cbuffer(const Temporal *temp, const Cbuffer *cb, bool restr,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer covers another one
  * @param[in] temp1,temp2 Temporal circular buffers
  * @param[in] restr True when the result is restricted to a value
@@ -915,7 +915,7 @@ tcovers_tcbuffer_tcbuffer(const Temporal *temp1, const Temporal *temp2,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a geometry are disjoint
  * @param[in] temp Temporal circular buffer
  * @param[in] gs Geometry
@@ -932,7 +932,7 @@ tdisjoint_geo_tcbuffer(const GSERIALIZED *gs, const Temporal *temp,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a geometry are disjoint
  * @param[in] temp Temporal circular buffer
  * @param[in] gs Geometry
@@ -949,7 +949,7 @@ tdisjoint_tcbuffer_geo(const Temporal *temp, const GSERIALIZED *gs,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a circular buffer are disjoint
  * @param[in] temp Temporal circular buffer
  * @param[in] cb Circular buffer
@@ -966,7 +966,7 @@ tdisjoint_cbuffer_tcbuffer(const Cbuffer *cb, const Temporal *temp,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a circular buffer are disjoint
  * @param[in] temp Temporal circular buffer
  * @param[in] cb Circular buffer
@@ -983,7 +983,7 @@ tdisjoint_tcbuffer_cbuffer(const Temporal *temp, const Cbuffer *cb,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether two temporal circular
+ * @brief Return a temporal boolean that states whether two temporal circular
  * buffers are disjoint
  * @param[in] temp1,temp2 Temporal circular buffers
  * @param[in] restr True when the result is restricted to a value
@@ -1003,7 +1003,7 @@ tdisjoint_tcbuffer_tcbuffer(const Temporal *temp1, const Temporal *temp2,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a geometry intersect
  * @param[in] temp Temporal circular buffer
  * @param[in] gs Geometry
@@ -1020,7 +1020,7 @@ tintersects_tcbuffer_geo(const Temporal *temp, const GSERIALIZED *gs,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a geometry intersect
  * @param[in] temp Temporal circular buffer
  * @param[in] gs Geometry
@@ -1037,7 +1037,7 @@ tintersects_geo_tcbuffer(const GSERIALIZED *gs, const Temporal *temp,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a circular buffer intersect
  * @param[in] temp Temporal circular buffer
  * @param[in] cb Circular buffer
@@ -1054,7 +1054,7 @@ tintersects_cbuffer_tcbuffer(const Cbuffer *cb, const Temporal *temp,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a circular buffer intersect
  * @param[in] temp Temporal circular buffer
  * @param[in] cb Circular buffer
@@ -1071,7 +1071,7 @@ tintersects_tcbuffer_cbuffer(const Temporal *temp, const Cbuffer *cb,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether two temporal circular
+ * @brief Return a temporal boolean that states whether two temporal circular
  * buffers intersect
  * @param[in] temp1,temp2 Temporal circular buffers
  * @param[in] restr True when the result is restricted to a value
@@ -1091,7 +1091,7 @@ tintersects_tcbuffer_tcbuffer(const Temporal *temp1, const Temporal *temp2,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer touches a geometry
  * @param[in] temp Temporal circular buffer
  * @param[in] gs Geometry
@@ -1109,7 +1109,7 @@ ttouches_tcbuffer_geo(const Temporal *temp, const GSERIALIZED *gs, bool restr,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer touches a geometry
  * @param[in] temp Temporal circular buffer
  * @param[in] gs Geometry
@@ -1128,7 +1128,7 @@ ttouches_geo_tcbuffer(const GSERIALIZED *gs, const Temporal *temp, bool restr,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a circular buffer
+ * @brief Return a temporal boolean that states whether a circular buffer
  * touches a temporal circular buffer
  * @param[in] cb Circular buffer
  * @param[in] temp Temporal circular buffer
@@ -1146,7 +1146,7 @@ ttouches_cbuffer_tcbuffer(const Cbuffer *cb, const Temporal *temp, bool restr,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer touches a geometry
  * @param[in] temp Temporal circular buffer
  * @param[in] cb Circular buffer
@@ -1164,7 +1164,7 @@ ttouches_tcbuffer_cbuffer(const Temporal *temp, const Cbuffer *cb, bool restr,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer touches another one
  * @param[in] temp1,temp2 Temporal circular buffer
  * @param[in] restr True when the result is restricted to a value
@@ -1185,7 +1185,7 @@ ttouches_tcbuffer_tcbuffer(const Temporal *temp1, const Temporal *temp2,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a geometry are within a distance
  * @param[in] temp Temporal circular buffer
  * @param[in] gs Geometry
@@ -1213,7 +1213,7 @@ tdwithin_tcbuffer_geo(const Temporal *temp, const GSERIALIZED *gs, double dist,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a geometry are within a distance
  * @param[in] temp Temporal circular buffer
  * @param[in] gs Geometry
@@ -1233,7 +1233,7 @@ tdwithin_geo_tcbuffer(const GSERIALIZED *gs, const Temporal *temp, double dist,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether a temporal circular
+ * @brief Return a temporal boolean that states whether a temporal circular
  * buffer and a circular buffer are within a distance
  * @param[in] temp Temporal circular buffer
  * @param[in] cb Circular buffer
@@ -1263,7 +1263,7 @@ tdwithin_tcbuffer_cbuffer(const Temporal *temp, const Cbuffer *cb, double dist,
 
 /**
  * @ingroup meos_cbuffer_rel_temp
- * @brief Return a temporal Boolean that states whether two temporal circular
+ * @brief Return a temporal boolean that states whether two temporal circular
  * buffers are within a distance
  * @param[in] temp1,temp2 Temporal circular buffers
  * @param[in] dist Distance

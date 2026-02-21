@@ -37,6 +37,7 @@
 #include <assert.h>
 /* PostgreSQL */
 #include <postgres.h>
+#include <pgtypes.h>
 #include <access/heaptoast.h>
 #include <access/detoast.h>
 #include <utils/timestamp.h>
@@ -70,7 +71,7 @@ Spanset_in(PG_FUNCTION_ARGS)
 {
   const char *input = PG_GETARG_CSTRING(0);
   Oid sstypid = PG_GETARG_OID(1);
-  SpanSet *result = spanset_in(input, oid_type(sstypid));
+  SpanSet *result = spanset_in(input, oid_meostype(sstypid));
   PG_RETURN_SPANSET_P(result);
 }
 
@@ -145,7 +146,7 @@ Spanset_as_text(PG_FUNCTION_ARGS)
   if (PG_NARGS() > 1 && ! PG_ARGISNULL(1))
     dbl_dig_for_wkt = PG_GETARG_INT32(1);
   char *str = spanset_out(ss, Int32GetDatum(dbl_dig_for_wkt));
-  text *result = cstring2text(str);
+  text *result = pg_cstring_to_text(str);
   pfree(str);
   PG_FREE_IF_COPY(ss, 0);
   PG_RETURN_TEXT_P(result);
@@ -182,7 +183,7 @@ Datum
 Spanset_from_hexwkb(PG_FUNCTION_ARGS)
 {
   text *hexwkb_text = PG_GETARG_TEXT_P(0);
-  char *hexwkb = text2cstring(hexwkb_text);
+  char *hexwkb = pg_text_to_cstring(hexwkb_text);
   SpanSet *result = spanset_from_hexwkb(hexwkb);
   pfree(hexwkb);
   PG_FREE_IF_COPY(hexwkb_text, 0);
@@ -265,7 +266,7 @@ Datum
 Value_to_spanset(PG_FUNCTION_ARGS)
 {
   Datum value = PG_GETARG_DATUM(0);
-  meosType basetype = oid_type(get_fn_expr_argtype(fcinfo->flinfo, 0));
+  meosType basetype = oid_meostype(get_fn_expr_argtype(fcinfo->flinfo, 0));
   PG_RETURN_SPANSET_P(value_spanset(value, basetype));
 }
 
@@ -295,8 +296,8 @@ PG_FUNCTION_INFO_V1(Span_to_spanset);
 Datum
 Span_to_spanset(PG_FUNCTION_ARGS)
 {
-  Span *s = PG_GETARG_SPAN_P(0);
-  PG_RETURN_SPANSET_P(span_to_spanset(s));
+  Span *sp = PG_GETARG_SPAN_P(0);
+  PG_RETURN_SPANSET_P(span_to_spanset(sp));
 }
 
 /**
@@ -305,14 +306,14 @@ Span_to_spanset(PG_FUNCTION_ARGS)
  * the full object
  */
 void
-spanset_span_slice(Datum d, Span *s)
+spanset_span_slice(Datum d, Span *sp)
 {
   SpanSet *ss = NULL;
   if (PG_DATUM_NEEDS_DETOAST((struct varlena *) d))
     ss = (SpanSet *) PG_DETOAST_DATUM_SLICE(d, 0, TIME_MAX_HEADER_SIZE);
   else
     ss = (SpanSet *) d;
-  memcpy(s, &ss->span, sizeof(Span));
+  memcpy(sp, &ss->span, sizeof(Span));
   // PG_FREE_IF_COPY_P(ss, DatumGetPointer(d));
   return;
 }
@@ -403,7 +404,6 @@ Tstzspanset_to_datespanset(PG_FUNCTION_ARGS)
 
 /*****************************************************************************/
 
-#if POSTGRESQL_VERSION_NUMBER >= 140000
 PGDLLEXPORT Datum Spanset_to_multirange(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(Spanset_to_multirange);
 /**
@@ -453,7 +453,6 @@ Multirange_to_spanset(PG_FUNCTION_ARGS)
   PG_FREE_IF_COPY(mrange, 0);
   PG_RETURN_SPANSET_P(result);
 }
-#endif /* POSTGRESQL_VERSION_NUMBER >= 140000 */
 
 /*****************************************************************************
  * Accessor functions
@@ -745,7 +744,7 @@ PGDLLEXPORT Datum Tstzspanset_timestamps(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(Tstzspanset_timestamps);
 /**
  * @ingroup mobilitydb_setspan_accessor
- * @brief Return the array of timestamptz values of a span set
+ * @brief Return an array of the timestamptz values of a span set
  * @sqlfn timestamps()
  */
 Datum
@@ -1258,8 +1257,8 @@ Datum
 Spanset_hash_extended(PG_FUNCTION_ARGS)
 {
   SpanSet *ss = PG_GETARG_SPANSET_P(0);
-  uint64 seed = PG_GETARG_INT64(1);
-  uint64 result = spanset_hash_extended(ss, seed);
+  uint64_t seed = PG_GETARG_INT64(1);
+  uint64_t result = spanset_hash_extended(ss, seed);
   PG_FREE_IF_COPY(ss, 0);
   PG_RETURN_UINT64(result);
 }

@@ -46,6 +46,10 @@
 
 #define PGC_ERRMSG_MAXLEN 2048 //256
 
+#ifndef CHECK_FOR_INTERRUPTS
+#define CHECK_FOR_INTERRUPTS() ((void)0)
+#endif
+
 /****************************************************************************************/
 /* Global to hold all the run-time constants */
 

@@ -92,7 +92,7 @@ npointset_out(const Set *s, int maxdd)
  * @csqlfn #Set_constructor()
  */
 Set *
-npointset_make(const Npoint **values, int count)
+npointset_make(Npoint **values, int count)
 {
   /* Ensure the validity of the arguments */
   VALIDATE_NOT_NULL(values, NULL);
@@ -181,7 +181,7 @@ npointset_value_n(const Set *s, int n, Npoint **result)
 
 /**
  * @ingroup meos_npoint_set_accessor
- * @brief Return the array of copies of the values of a network point set
+ * @brief Return an array of copies of the values of a network point set
  * @param[in] s Set
  * @return On error return @p NULL
  * @csqlfn #Set_values()
@@ -223,7 +223,7 @@ ensure_valid_set_npoint(const Set *s, const Npoint *np)
  * @csqlfn #Contains_set_value()
  */
 bool
-contains_set_npoint(const Set *s, Npoint *np)
+contains_set_npoint(const Set *s, const Npoint *np)
 {
   /* Ensure the validity of the arguments */
   if (! ensure_valid_set_npoint(s, np))

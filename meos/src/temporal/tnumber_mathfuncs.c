@@ -34,8 +34,6 @@
  * ...) for temporal numbers
  */
 
-#include "temporal/tnumber_mathfuncs.h"
-
 /* C */
 #include <assert.h>
 #include <math.h>
@@ -47,8 +45,13 @@
 #include <meos_internal.h>
 #include "temporal/lifting.h"
 #include "temporal/tinstant.h"
+#include "temporal/tnumber_mathfuncs.h"
 #include "temporal/tsequence.h"
 #include "temporal/type_util.h"
+
+#include <utils/jsonb.h>
+#include <utils/numeric.h>
+#include <pgtypes.h>
 
 /*****************************************************************************
  * General functions on datums
@@ -139,10 +142,10 @@ arithop_tnumber_number(const Temporal *temp, Datum value, TArithmetic oper,
   LiftedFunctionInfo lfinfo;
   memset(&lfinfo, 0, sizeof(LiftedFunctionInfo));
   lfinfo.func = (varfunc) func;
-  lfinfo.numparam = 1;
-  lfinfo.param[0] = basetype;
   lfinfo.argtype[0] = temp->temptype;
   lfinfo.argtype[1] = basetype;
+  lfinfo.numparam = 1;
+  lfinfo.param[0] = basetype;
   lfinfo.restype = temp->temptype;
   lfinfo.reslinear = MEOS_FLAGS_LINEAR_INTERP(temp->flags);
   lfinfo.invert = invert;
@@ -195,9 +198,9 @@ arithop_tnumber_tnumber(const Temporal *temp1, const Temporal *temp2,
   LiftedFunctionInfo lfinfo;
   memset(&lfinfo, 0, sizeof(LiftedFunctionInfo));
   lfinfo.func = (varfunc) func;
+  lfinfo.argtype[0] = lfinfo.argtype[1] = temp1->temptype;
   lfinfo.numparam = 1;
   lfinfo.param[0] = basetype;
-  lfinfo.argtype[0] = lfinfo.argtype[1] = temp1->temptype;
   lfinfo.restype = temp1->temptype;
   lfinfo.reslinear = linear1 || linear2;
   lfinfo.invert = INVERT_NO;
@@ -480,13 +483,13 @@ angular_difference(Datum degrees1, Datum degrees2)
 }
 
 /**
- * @ingroup meos_base_types
+ * @ingroup meos_base_float
  * @brief Return the angular difference, i.e., the smaller angle between the
  * two degree values
  * @param[in] degrees1,degrees2 Values
  */
 double
-float_angular_difference(double degrees1, double degrees2)
+float8_angular_difference(double degrees1, double degrees2)
 {
   return DatumGetFloat8(angular_difference(Float8GetDatum(degrees1),
     Float8GetDatum(degrees2)));
@@ -592,53 +595,101 @@ tnumber_angular_difference(const Temporal *temp)
 }
 
 /*****************************************************************************
- * Exponential functions
+ * Trend functions
  *****************************************************************************/
 
 /**
- * @ingroup meos_base_types
- * @brief Return the exponential of a double
- * @param[in] d Value
- * @note PostgreSQL function: dexp(PG_FUNCTION_ARGS)
+ * @ingroup meos_internal_temporal_math
+ * @brief Return the trend of a temporal sequence number
+ * @param[in] seq Temporal sequence number
+ * @csqlfn #Tnumber_trend()
  */
-double
-float_exp(double d)
+TSequence *
+tnumberseq_trend(const TSequence *seq)
 {
-  double result;
-  /*
-   * Handle NaN and Inf cases explicitly.  This avoids needing to assume
-   * that the platform's exp() conforms to POSIX for these cases, and it
-   * removes some edge cases for the overflow checks below.
-   */
-  if (isnan(d))
-    result = d;
-  else if (isinf(d))
+  assert(seq); 
+
+  /* Instantaneous sequence */
+  if (seq->count == 1)
+    return NULL;
+
+  /* General case */
+  meosType basetype = temptype_basetype(seq->temptype);
+  TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
+  const TInstant *inst1 = TSEQUENCE_INST_N(seq, 0);
+  Datum value1 = tinstant_value_p(inst1);
+  int trend = 0; /* make compiler quiet */
+  for (int i = 0; i < seq->count - 1; i++)
   {
-    /* Per POSIX, exp(-Inf) is 0 */
-    result = (d > 0.0) ? d : 0;
+    const TInstant *inst2 = TSEQUENCE_INST_N(seq, i + 1);
+    Datum value2 = tinstant_value_p(inst2);
+    trend = datum_cmp(value1, value2, basetype) * -1;
+    instants[i] = tinstant_make(Int32GetDatum(trend), T_TINT, inst1->t);
+    inst1 = inst2;
+    value1 = value2;
   }
-  else
-  {
-    /*
-     * On some platforms, exp() will not set errno but just return Inf or
-     * zero to report overflow/underflow; therefore, test both cases.
-     */
-    errno = 0;
-    result = exp(d);
-    if (unlikely(errno == ERANGE))
-    {
-      if (result != 0.0)
-        float_overflow_error();
-      else
-        float_underflow_error();
-    }
-    else if (unlikely(isinf(result)))
-      float_overflow_error();
-    else if (unlikely(result == 0.0))
-      float_underflow_error();
-  }
+  instants[seq->count - 1] = tinstant_make(Int32GetDatum(trend),
+    T_TINT, seq->period.upper);
+  /* The resulting sequence has step interpolation */
+  TSequence *result = tsequence_make(instants, seq->count,
+    seq->period.lower_inc, seq->period.upper_inc, STEP, NORMALIZE);
+  pfree_array((void **) instants, seq->count);
   return result;
 }
+
+/**
+ * @ingroup meos_internal_temporal_math
+ * @brief Return the trend of a temporal sequence set number
+ * @param[in] ss Temporal sequence set
+ * @csqlfn #Tnumber_trend()
+ */
+TSequenceSet *
+tnumberseqset_trend(const TSequenceSet *ss)
+{
+  assert(ss); assert(MEOS_FLAGS_LINEAR_INTERP(ss->flags));
+  TSequence **sequences = palloc(sizeof(TSequence *) * ss->count);
+  int nseqs = 0;
+  for (int i = 0; i < ss->count; i++)
+  {
+    const TSequence *seq = TSEQUENCESET_SEQ_N(ss, i);
+    if (seq->count > 1)
+      sequences[nseqs++] = tnumberseq_trend(seq);
+  }
+  /* The resulting sequence set has step interpolation */
+  return tsequenceset_make_free(sequences, nseqs, NORMALIZE);
+}
+
+/**
+ * @ingroup meos_temporal_math
+ * @brief Return the trend of a temporal number
+ * @param[in] temp Temporal number
+ * @see #tnumberseq_trend()
+ * @see #tnumberseqset_trend()
+ * @csqlfn #Tnumber_trend()
+ */
+Temporal *
+tnumber_trend(const Temporal *temp)
+{
+  /* Ensure the validity of the arguments */
+  VALIDATE_NOT_NULL(temp, NULL);
+  if (! ensure_linear_interp(temp->flags))
+    return NULL;
+
+  assert(temptype_subtype(temp->subtype));
+  switch (temp->subtype)
+  {
+    case TINSTANT:
+      return NULL;
+    case TSEQUENCE:
+      return (Temporal *) tnumberseq_trend((TSequence *) temp);
+    default: /* TSEQUENCESET */
+      return (Temporal *) tnumberseqset_trend((TSequenceSet *) temp);
+  }
+}
+
+/*****************************************************************************
+ * Exponential functions
+ *****************************************************************************/
 
 /**
  * @brief Return the exponential of a double
@@ -648,7 +699,7 @@ float_exp(double d)
 static Datum
 datum_exp(Datum d)
 {
-  return Float8GetDatum(float_exp(DatumGetFloat8(d)));
+  return Float8GetDatum(float8_exp(DatumGetFloat8(d)));
 }
 
 /**
@@ -666,46 +717,15 @@ tfloat_exp(const Temporal *temp)
   LiftedFunctionInfo lfinfo;
   memset(&lfinfo, 0, sizeof(LiftedFunctionInfo));
   lfinfo.func = (varfunc) datum_exp;
-  lfinfo.numparam = 0;
   lfinfo.argtype[0] = T_TFLOAT;
   lfinfo.restype = T_TFLOAT;
+  lfinfo.reslinear = MEOS_FLAGS_LINEAR_INTERP(temp->flags);
   return tfunc_temporal(temp, &lfinfo);
 }
 
 /*****************************************************************************
  * Logarithm functions
  *****************************************************************************/
-
-/**
- * @ingroup meos_base_types
- * @brief Return the natural logarithm of a double
- * @param[in] d Value
- * @note PostgreSQL function: dlog1(PG_FUNCTION_ARGS)
- */
-double
-float_ln(double d)
-{
-  double result;
-
-  /*
-   * Emit particular SQLSTATE error codes for ln(). This is required by the
-   * SQL standard.
-   */
-  if (d == 0.0)
-    meos_error(ERROR, MEOS_ERR_INVALID_ARG_VALUE,
-      "cannot take logarithm of zero");
-  if (d < 0)
-    meos_error(ERROR, MEOS_ERR_INVALID_ARG_VALUE,
-      "cannot take logarithm of a negative number");
-
-  result = log(d);
-  if (unlikely(isinf(result)) && !isinf(d))
-    float_overflow_error();
-  if (unlikely(result == 0.0) && d != 1.0)
-    float_underflow_error();
-
-  return result;
-}
 
 /**
  * @brief Return the natural logarithm of a double
@@ -715,7 +735,7 @@ float_ln(double d)
 static Datum
 datum_ln(Datum d)
 {
-  return Float8GetDatum(float_ln(DatumGetFloat8(d)));
+  return Float8GetDatum(float8_ln(DatumGetFloat8(d)));
 }
 
 /**
@@ -740,45 +760,13 @@ tfloat_ln(const Temporal *temp)
   LiftedFunctionInfo lfinfo;
   memset(&lfinfo, 0, sizeof(LiftedFunctionInfo));
   lfinfo.func = (varfunc) datum_ln;
-  lfinfo.numparam = 0;
   lfinfo.argtype[0] = T_TFLOAT;
   lfinfo.restype = T_TFLOAT;
+  lfinfo.reslinear = MEOS_FLAGS_LINEAR_INTERP(temp->flags);
   return tfunc_temporal(temp, &lfinfo);
 }
 
 /*****************************************************************************/
-
-/**
- * @ingroup meos_base_types
- * @brief Return the logarithm base 10 of a double
- * @param[in] d Value
- * @note PostgreSQL function: dlog10(PG_FUNCTION_ARGS)
- */
-double
-float_log10(double d)
-{
-  double result;
-
-  /*
-   * Emit particular SQLSTATE error codes for log(). The SQL spec doesn't
-   * define log(), but it does define ln(), so it makes sense to emit the
-   * same error code for an analogous error condition.
-   */
-  if (d == 0.0)
-    meos_error(ERROR, MEOS_ERR_INVALID_ARG_VALUE,
-      "Cannot take logarithm of zero");
-  if (d < 0)
-    meos_error(ERROR, MEOS_ERR_INVALID_ARG_VALUE,
-      "Cannot take logarithm of a negative number");
-
-  result = log10(d);
-  if (unlikely(isinf(result)) && !isinf(d))
-    float_overflow_error();
-  if (unlikely(result == 0.0) && d != 1.0)
-    float_underflow_error();
-
-  return result;
-}
 
 /**
  * @brief Return the logarithm base 10 of a double
@@ -788,7 +776,7 @@ float_log10(double d)
 static Datum
 datum_log10(Datum d)
 {
-  return Float8GetDatum(float_log10(DatumGetFloat8(d)));
+  return Float8GetDatum(float8_log10(DatumGetFloat8(d)));
 }
 
 /**
@@ -813,9 +801,9 @@ tfloat_log10(const Temporal *temp)
   LiftedFunctionInfo lfinfo;
   memset(&lfinfo, 0, sizeof(LiftedFunctionInfo));
   lfinfo.func = (varfunc) datum_log10;
-  lfinfo.numparam = 0;
   lfinfo.argtype[0] = T_TFLOAT;
   lfinfo.restype = T_TFLOAT;
+  lfinfo.reslinear = MEOS_FLAGS_LINEAR_INTERP(temp->flags);
   return tfunc_temporal(temp, &lfinfo);
 }
 

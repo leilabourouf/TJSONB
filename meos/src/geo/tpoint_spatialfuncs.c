@@ -32,11 +32,10 @@
  * @brief Spatial functions for temporal points
  */
 
-#include "geo/tgeo_spatialfuncs.h"
-
 /* C */
 #include <assert.h>
 /* PostgreSQL */
+#include <postgres.h>
 #include <utils/float.h>
 #if POSTGRESQL_VERSION_NUMBER >= 160000
   #include "varatt.h"
@@ -50,7 +49,6 @@
 #include <meos.h>
 #include <meos_internal.h>
 #include <meos_internal_geo.h>
-#include "temporal/postgres_types.h"
 #include "temporal/lifting.h"
 #include "temporal/temporal_compops.h"
 #include "temporal/tnumber_mathfuncs.h"
@@ -60,6 +58,7 @@
 #include "geo/stbox.h"
 #include "geo/tgeo.h"
 #include "geo/tgeo_distance.h"
+#include "geo/tgeo_spatialfuncs.h"
 #if CBUFFER
   #include "cbuffer/cbuffer.h"
 #endif
@@ -67,6 +66,10 @@
   #include "npoint/tnpoint.h"
   #include "npoint/tnpoint_spatialfuncs.h"
 #endif
+
+#include <utils/jsonb.h>
+#include <utils/numeric.h>
+#include <pgtypes.h>
 
 /* Timestamps in PostgreSQL are encoded as MICROseconds since '2000-01-01'
  * while Unix epoch are encoded as MILLIseconds since '1970-01-01'.
@@ -179,9 +182,9 @@ tpoint_get_coord(const Temporal *temp, int coord)
     lfinfo.func = (varfunc) &point_get_y;
   else /* coord == 2 */
     lfinfo.func = (varfunc) &point_get_z;
-  lfinfo.numparam = 0;
   lfinfo.argtype[0] = temp->temptype;
   lfinfo.restype = T_TFLOAT;
+  lfinfo.reslinear = MEOS_FLAGS_LINEAR_INTERP(temp->flags);
   return tfunc_temporal(temp, &lfinfo);
 }
 
@@ -460,7 +463,6 @@ pointsegm_interpolate(Datum start, Datum end, long double ratio)
 
   Datum result = PointerGetDatum(geopoint_make(p.x, p.y, p.z, hasz, geodetic,
     srid));
-  PG_FREE_IF_COPY_P(gs, DatumGetPointer(start));
   return result;
 }
 
@@ -632,21 +634,21 @@ lwpoint_cmp(const LWPOINT *p, const LWPOINT *q)
   /* We are sure the points are not empty */
   lwpoint_getPoint4d_p(p, &p4d);
   lwpoint_getPoint4d_p(q, &q4d);
-  int cmp = float8_cmp_internal(p4d.x, q4d.x);
+  int cmp = pg_float8_cmp(p4d.x, q4d.x);
   if (cmp != 0)
     return cmp;
-  cmp = float8_cmp_internal(p4d.y, q4d.y);
+  cmp = pg_float8_cmp(p4d.y, q4d.y);
   if (cmp != 0)
     return cmp;
   if (FLAGS_GET_Z(p->flags))
   {
-    cmp = float8_cmp_internal(p4d.z, q4d.z);
+    cmp = pg_float8_cmp(p4d.z, q4d.z);
     if (cmp != 0)
       return cmp;
   }
   if (FLAGS_GET_M(p->flags))
   {
-    cmp = float8_cmp_internal(p4d.m, q4d.m);
+    cmp = pg_float8_cmp(p4d.m, q4d.m);
     if (cmp != 0)
       return cmp;
   }
@@ -1755,8 +1757,8 @@ tpointseq_remove_repeated_points(const TSequence *seq, double tolerance,
   double tolsq = tolerance * tolerance;
   double dsq = FLT_MAX;
 
-  const TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
-  instants[0] = TSEQUENCE_INST_N(seq, 0);
+  TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
+  instants[0] = (TInstant *) TSEQUENCE_INST_N(seq, 0);
   const POINT2D *last = DATUM_POINT2D_P(tinstant_value_p(instants[0]));
   int npoints = 1;
   for (int i = 1; i < seq->count; i++)
@@ -1794,7 +1796,7 @@ tpointseq_remove_repeated_points(const TSequence *seq, double tolerance,
     }
 
     /* Save the point */
-    instants[npoints++] = inst;
+    instants[npoints++] = (TInstant *) inst;
     last = pt;
   }
   /* Construct the result */
@@ -2078,9 +2080,9 @@ tpoint_mvt(const Temporal *tpoint, const STBox *box, uint32_t extent,
  * @note The timestamps are returned in Unix epoch
  */
 static GSERIALIZED *
-tpointinst_decouple(const TInstant *inst, int64 **timesarr, int *count)
+tpointinst_decouple(const TInstant *inst, int64_t **timesarr, int *count)
 {
-  int64 *times = palloc(sizeof(int64));
+  int64_t *times = palloc(sizeof(int64_t));
   times[0] = (inst->t / 1000000) + DELTA_UNIX_POSTGRES_EPOCH;
   *timesarr = times;
   *count = 1;
@@ -2096,7 +2098,7 @@ tpointinst_decouple(const TInstant *inst, int64 **timesarr, int *count)
  * @note The timestamps are returned in Unix epoch
  */
 static LWGEOM *
-tpointseq_decouple_iter(const TSequence *seq, int64 *times)
+tpointseq_decouple_iter(const TSequence *seq, int64_t *times)
 {
   assert(seq); assert(times);
   /* General case */
@@ -2128,15 +2130,15 @@ tpointseq_decouple_iter(const TSequence *seq, int64 *times)
  * @note The timestamps are returned in Unix epoch
  */
 static GSERIALIZED *
-tpointseq_decouple(const TSequence *seq, int64 **timesarr, int *count)
+tpointseq_decouple(const TSequence *seq, int64_t **timesarr, int *count)
 {
   assert(seq); assert(timesarr); assert(count);
-  int64 *times = palloc(sizeof(int64) * seq->count);
+  int64_t *times = palloc(sizeof(int64_t) * seq->count);
   LWGEOM *geom = tpointseq_decouple_iter(seq, times);
   GSERIALIZED *result = geo_serialize(geom);
   *timesarr = times;
   *count = seq->count;
-  pfree(geom);
+  lwgeom_free(geom);
   return result;
 }
 
@@ -2150,7 +2152,7 @@ tpointseq_decouple(const TSequence *seq, int64 **timesarr, int *count)
  * @note The timestamps are returned in Unix epoch
  */
 static GSERIALIZED *
-tpointseqset_decouple(const TSequenceSet *ss, int64 **timesarr, int *count)
+tpointseqset_decouple(const TSequenceSet *ss, int64_t **timesarr, int *count)
 {
   assert(ss); assert(timesarr); assert(count);
   /* Singleton sequence set */
@@ -2160,7 +2162,7 @@ tpointseqset_decouple(const TSequenceSet *ss, int64 **timesarr, int *count)
   /* General case */
   uint32_t colltype = 0;
   LWGEOM **geoms = palloc(sizeof(LWGEOM *) * ss->count);
-  int64 *times = palloc(sizeof(int64) * ss->totalcount);
+  int64_t *times = palloc(sizeof(int64_t) * ss->totalcount);
   int ntimes = 0;
   for (int i = 0; i < ss->count; i++)
   {
@@ -2195,7 +2197,7 @@ tpointseqset_decouple(const TSequenceSet *ss, int64 **timesarr, int *count)
  * @note The timestamps are returned in Unix epoch
  */
 static GSERIALIZED *
-tpoint_decouple(const Temporal *temp, int64 **timesarr, int *count)
+tpoint_decouple(const Temporal *temp, int64_t **timesarr, int *count)
 {
   assert(temp); assert(timesarr); assert(count);
   assert(tpoint_type(temp->temptype));
@@ -2228,7 +2230,7 @@ tpoint_decouple(const Temporal *temp, int64 **timesarr, int *count)
  */
 bool
 tpoint_as_mvtgeom(const Temporal *temp, const STBox *bounds, int32_t extent,
-  int32_t buffer, bool clip_geom, GSERIALIZED **gsarr, int64 **timesarr,
+  int32_t buffer, bool clip_geom, GSERIALIZED **gsarr, TimestampTz **timesarr,
   int *count)
 {
   /* Ensure the validity of the arguments */
@@ -2264,8 +2266,7 @@ tpoint_as_mvtgeom(const Temporal *temp, const STBox *bounds, int32_t extent,
   double bounds_height = ((bounds->ymax - bounds->ymin) / extent) / 2.0;
   if (tpoint_width < bounds_width && tpoint_height < bounds_height)
   {
-    PG_FREE_IF_COPY(temp, 0);
-    PG_RETURN_NULL();
+    return NULL;
   }
   */
 
@@ -2795,8 +2796,8 @@ tpointseq_azimuth_iter(const TSequence *seq, TSequence **result)
         instants[ninsts++] = tinstant_make(azimuth, T_TFLOAT, inst1->t);
         upper_inc = true;
         /* Resulting sequence has step interpolation */
-        result[nseqs++] = tsequence_make((const TInstant **) instants, ninsts,
-          lower_inc, upper_inc, STEP, NORMALIZE);
+        result[nseqs++] = tsequence_make(instants, ninsts, lower_inc,
+          upper_inc, STEP, NORMALIZE);
         for (int j = 0; j < ninsts; j++)
           pfree(instants[j]);
         ninsts = 0;
@@ -2810,8 +2811,10 @@ tpointseq_azimuth_iter(const TSequence *seq, TSequence **result)
   {
     instants[ninsts++] = tinstant_make(azimuth, T_TFLOAT, inst1->t);
     /* Resulting sequence has step interpolation */
-    result[nseqs++] = tsequence_make((const TInstant **) instants, ninsts,
-      lower_inc, upper_inc, STEP, NORMALIZE);
+    result[nseqs++] = tsequence_make(instants, ninsts, lower_inc, upper_inc,
+      STEP, NORMALIZE);
+    for (int j = 0; j < ninsts; j++)
+      pfree(instants[j]);
   }
 
   pfree(instants);
@@ -2896,7 +2899,7 @@ tpoint_angular_difference(const Temporal *temp)
   {
     Temporal *tazimuth_deg = tfloat_degrees(tazimuth, false);
     result = tnumber_angular_difference(tazimuth_deg);
-    pfree(tazimuth_deg);
+    pfree(tazimuth); pfree(tazimuth_deg);
   }
   return result;
 }
@@ -2935,7 +2938,7 @@ geom_bearing(Datum point1, Datum point2)
 
   if (fabs(p1->y - p2->y) > MEOS_EPSILON)
   {
-    double bearing = pg_datan((p1->x - p2->x) / (p1->y - p2->y)) +
+    double bearing = float8_atan((p1->x - p2->x) / (p1->y - p2->y)) +
       alpha(p1, p2);
     if (fabs(bearing) <= MEOS_EPSILON)
       bearing = 0.0;
@@ -2968,11 +2971,11 @@ geog_bearing(Datum point1, Datum point2)
   double lat1 = float8_mul(p1->y, RADIANS_PER_DEGREE);
   double lat2 = float8_mul(p2->y, RADIANS_PER_DEGREE);
   double diffLong = float8_mul(p2->x - p1->x, RADIANS_PER_DEGREE);
-  double lat = pg_dsin(diffLong) * pg_dcos(lat2);
-  double lgt = ( pg_dcos(lat1) * pg_dsin(lat2) ) -
-    ( pg_dsin(lat1) * pg_dcos(lat2) * pg_dcos(diffLong) );
+  double lat = float8_sin(diffLong) * float8_cos(lat2);
+  double lgt = ( float8_cos(lat1) * float8_sin(lat2) ) -
+    ( float8_sin(lat1) * float8_cos(lat2) * float8_cos(diffLong) );
   /* Notice that the arguments are inverted, e.g., wrt the atan2 in Python */
-  double initial_bearing = pg_datan2(lat, lgt);
+  double initial_bearing = float8_atan2(lat, lgt);
   /* Normalize the bearing from -180° to + 180° (in radians) to
    * 0° to 360° (in radians) */
   double bearing = fmod(initial_bearing + M_PI * 2.0, M_PI * 2.0);
@@ -2983,7 +2986,7 @@ geog_bearing(Datum point1, Datum point2)
  * @brief Select the appropriate bearing function
  */
 static inline datum_func2
-geo_bearing_fn(int16 flags)
+geo_bearing_fn(int16_t flags)
 {
   return MEOS_FLAGS_GET_GEODETIC(flags) ? &geog_bearing : &geom_bearing;
 }
@@ -3116,10 +3119,12 @@ tpointsegm_bearing_turnpt(Datum start1, Datum end1, Datum start2,
     lower, upper, *t2);
   sp1 = DATUM_POINT2D_P(v1);
   sp2 = DATUM_POINT2D_P(v2);
-  pfree(DatumGetPointer(v1)); pfree(DatumGetPointer(v2));
+  int result;
   if (sp1->y > sp2->y) // TODO Use MEOS_EPSILON
-    return 0;
-  return 1;
+    result = 0;
+  result = 1;
+  pfree(DatumGetPointer(v1)); pfree(DatumGetPointer(v2));
+  return result;
 }
 
 /*****************************************************************************/
@@ -3153,7 +3158,7 @@ bearing_point_point(const GSERIALIZED *gs1, const GSERIALIZED *gs2,
  * @brief Return the temporal bearing between a temporal point and a point
  * @param[in] temp Temporal point
  * @param[in] gs Geometry
- * @param[out] invert True when the result should be inverted
+ * @param[out] invert True when the result must be inverted
  * @return On empty geometry or on error return NULL
  * @csqlfn #Bearing_tpoint_point()
  */
@@ -3167,7 +3172,6 @@ bearing_tpoint_point(const Temporal *temp, const GSERIALIZED *gs, bool invert)
   LiftedFunctionInfo lfinfo;
   memset(&lfinfo, 0, sizeof(LiftedFunctionInfo));
   lfinfo.func = (varfunc) geo_bearing_fn(temp->flags);
-  lfinfo.numparam = 0;
   lfinfo.argtype[0] = temp->temptype;
   lfinfo.argtype[1] = temptype_basetype(temp->temptype);
   lfinfo.restype = T_TFLOAT;
@@ -3196,7 +3200,6 @@ bearing_tpoint_tpoint(const Temporal *temp1, const Temporal *temp2)
   LiftedFunctionInfo lfinfo;
   memset(&lfinfo, 0, sizeof(LiftedFunctionInfo));
   lfinfo.func = (varfunc) geo_bearing_fn(temp1->flags);
-  lfinfo.numparam = 0;
   lfinfo.argtype[0] = lfinfo.argtype[1] = temp1->temptype;
   lfinfo.restype = T_TFLOAT;
   lfinfo.reslinear = MEOS_FLAGS_LINEAR_INTERP(temp1->flags) ||
@@ -3390,7 +3393,7 @@ multipoint_add_inst_free(GEOSGeometry *geom, const TInstant *inst)
  * @pre The temporal sequence is not instantaneous
  */
 int
-tpointseq_stops_iter(const TSequence *seq, double maxdist, int64 mintunits,
+tpointseq_stops_iter(const TSequence *seq, double maxdist, int64_t mintunits,
   TSequence **result)
 {
   assert(seq); assert(seq->count > 1);
@@ -3417,7 +3420,7 @@ tpointseq_stops_iter(const TSequence *seq, double maxdist, int64 mintunits,
     inst2 = TSEQUENCE_INST_N(seq, end);
 
     while (! is_stopped && end - start > 1 &&
-      (int64)(inst2->t - inst1->t) >= mintunits)
+      (int64_t)(inst2->t - inst1->t) >= mintunits)
     {
       inst1 = TSEQUENCE_INST_N(seq, ++start);
       rebuild_geom = true;
@@ -3438,13 +3441,13 @@ tpointseq_stops_iter(const TSequence *seq, double maxdist, int64 mintunits,
     is_stopped = mrr_distance_geos(geom, geodetic) <= maxdist;
     inst2 = TSEQUENCE_INST_N(seq, end - 1);
     if (! is_stopped && previously_stopped &&
-      (int64)(inst2->t - inst1->t) >= mintunits) /* Found a stop */
+      (int64_t)(inst2->t - inst1->t) >= mintunits) /* Found a stop */
     {
-      const TInstant **insts = palloc(sizeof(TInstant *) * (end - start));
+      TInstant **instants = palloc(sizeof(TInstant *) * (end - start));
       for (int i = 0; i < end - start; ++i)
-        insts[i] = TSEQUENCE_INST_N(seq, start + i);
-      result[nseqs++] = tsequence_make(insts, end - start, true, true, LINEAR,
-        NORMALIZE_NO);
+        instants[i] = (TInstant *) TSEQUENCE_INST_N(seq, start + i);
+      result[nseqs++] = tsequence_make(instants, end - start, true, true,
+        LINEAR, NORMALIZE_NO);
       start = end;
       rebuild_geom = true;
     }
@@ -3453,14 +3456,15 @@ tpointseq_stops_iter(const TSequence *seq, double maxdist, int64 mintunits,
   GEOSGeom_destroy(geom);
 
   inst2 = TSEQUENCE_INST_N(seq, end - 1);
-  if (is_stopped && (int64)(inst2->t - inst1->t) >= mintunits)
+  if (is_stopped && (int64_t)(inst2->t - inst1->t) >= mintunits)
   {
-    const TInstant **insts = palloc(sizeof(TInstant *) * (end - start));
+    TInstant **instants = palloc(sizeof(TInstant *) * (end - start));
     for (int i = 0; i < end - start; ++i)
-      insts[i] = TSEQUENCE_INST_N(seq, start + i);
-    result[nseqs++] = tsequence_make(insts, end - start, true, true, LINEAR,
+      instants[i] = (TInstant *) TSEQUENCE_INST_N(seq, start + i);
+    result[nseqs++] = tsequence_make(instants, end - start, true, true, LINEAR,
       NORMALIZE_NO);
   }
+  finishGEOS();
   return nseqs;
 }
 
@@ -3971,7 +3975,7 @@ tpointseq_disc_split(const TSequence *seq, bool *splits, int count)
   assert(seq); assert(splits); assert(seq->count > 1);
   assert(MEOS_FLAGS_GET_INTERP(seq->flags) == DISCRETE);
 
-  const TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
+  TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
   TSequence **result = palloc(sizeof(TSequence *) * count);
   /* Create the splits */
   int start = 0, nseqs = 0;
@@ -3982,7 +3986,7 @@ tpointseq_disc_split(const TSequence *seq, bool *splits, int count)
       end++;
     /* Construct piece from start to end */
     for (int j = 0; j < end - start; j++)
-      instants[j] = TSEQUENCE_INST_N(seq, j + start);
+      instants[j] = (TInstant *) TSEQUENCE_INST_N(seq, j + start);
     result[nseqs++] = tsequence_make(instants, end - start, true, true,
       DISCRETE, NORMALIZE_NO);
     /* Continue with the next split */
@@ -4035,8 +4039,8 @@ tpointseq_cont_split(const TSequence *seq, bool *splits, int count)
       tofree = true;
       upper_inc1 = false;
     }
-    result[nseqs++] = tsequence_make((const TInstant **) instants, end - start + 1,
-      lower_inc1, upper_inc1, linear ? LINEAR : STEP, NORMALIZE_NO);
+    result[nseqs++] = tsequence_make(instants, end - start + 1, lower_inc1,
+      upper_inc1, linear ? LINEAR : STEP, NORMALIZE_NO);
     if (tofree)
       /* Free the last instant created for the step interpolation */
       pfree(instants[end - start]);
@@ -4049,9 +4053,8 @@ tpointseq_cont_split(const TSequence *seq, bool *splits, int count)
     if (seq->count - start > 1 || seq->period.upper_inc)
     {
       instants[0] = (TInstant *) TSEQUENCE_INST_N(seq, seq->count - 1);
-      result[nseqs++] = tsequence_make((const TInstant **) instants,
-        seq->count - start, true, seq->period.upper_inc,
-        linear, NORMALIZE_NO);
+      result[nseqs++] = tsequence_make(instants, seq->count - start, true,
+        seq->period.upper_inc, linear, NORMALIZE_NO);
     }
   }
   pfree(instants);

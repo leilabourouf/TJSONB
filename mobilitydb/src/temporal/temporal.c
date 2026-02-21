@@ -38,6 +38,7 @@
 #include <assert.h>
 /* PostgreSQL */
 #include <postgres.h>
+#include <pgtypes.h>
 #include <funcapi.h>
 #include <access/heaptoast.h>
 #include <access/detoast.h>
@@ -192,18 +193,18 @@ Temporal_typmod_in(PG_FUNCTION_ARGS)
     ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
       errmsg("Empty temporal type modifier")));
 
-  int16 tempsubtype = ANYTEMPSUBTYPE;
+  int16_t tempsubtype = ANYTEMPSUBTYPE;
   if (! tempsubtype_from_string(s, &tempsubtype))
     ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
       errmsg("Invalid temporal type modifier: %s", s)));
 
   /* Set the typmod */
-  uint32 typmod = 0;
+  uint32_t typmod = 0;
   if (tempsubtype != ANYTEMPSUBTYPE)
     TYPMOD_SET_TEMPSUBTYPE(typmod, tempsubtype);
 
   pfree(elem_values);
-  PG_RETURN_INT32((int32) typmod);
+  PG_RETURN_INT32((int32_t) typmod);
 }
 
 PGDLLEXPORT Datum Temporal_typmod_out(PG_FUNCTION_ARGS);
@@ -215,8 +216,8 @@ Datum
 Temporal_typmod_out(PG_FUNCTION_ARGS)
 {
   char *str = palloc(TYPMOD_MAXLEN);
-  int32 typmod = PG_GETARG_INT32(0);
-  int16 subtype = TYPMOD_GET_TEMPSUBTYPE(typmod);
+  int32_t typmod = PG_GETARG_INT32(0);
+  int16_t subtype = TYPMOD_GET_TEMPSUBTYPE(typmod);
   /* No type? Then no typmod at all. Return empty string.  */
   if (typmod < 0 || ! subtype)
   {
@@ -236,7 +237,7 @@ Datum
 Temporal_enforce_typmod(PG_FUNCTION_ARGS)
 {
   Temporal *temp = PG_GETARG_TEMPORAL_P(0);
-  int32 typmod = PG_GETARG_INT32(1);
+  int32_t typmod = PG_GETARG_INT32(1);
   /* Check if temporal typmod is consistent with the supplied one */
   temp = temporal_valid_typmod(temp, typmod);
   PG_RETURN_TEMPORAL_P(temp);
@@ -285,7 +286,7 @@ Datum
 Mobilitydb_version(PG_FUNCTION_ARGS UNUSED)
 {
   char *version = mobilitydb_version();
-  text *result = cstring2text(version);
+  text *result = pg_cstring_to_text(version);
   PG_RETURN_TEXT_P(result);
 }
 
@@ -300,7 +301,7 @@ Datum
 Mobilitydb_full_version(PG_FUNCTION_ARGS UNUSED)
 {
   char *version = mobilitydb_full_version();
-  text *result = cstring2text(version);
+  text *result = pg_cstring_to_text(version);
   pfree(version);
   PG_RETURN_TEXT_P(result);
 }
@@ -406,7 +407,7 @@ Temporal_in(PG_FUNCTION_ARGS)
 {
   const char *input = PG_GETARG_CSTRING(0);
   Oid temptypid = PG_GETARG_OID(1);
-  Temporal *result = temporal_in(input, oid_type(temptypid));
+  Temporal *result = temporal_in(input, oid_meostype(temptypid));
   int32 typmod = -1;
   if (PG_NARGS() > 2 && !PG_ARGISNULL(2))
     typmod = PG_GETARG_INT32(2);
@@ -513,15 +514,16 @@ Temporal_send(PG_FUNCTION_ARGS)
  ****************************************************************************/
 
 /**
- * @ingroup mobilitydb_temporal_constructor
- * @brief Return a temporal instant from a value and a timestamptz
- * @sqlfn tint(), tfloat(), ...
+ * @brief Get an interpolation text
+ * @pre The text CANNOT be null. This is usually achieved by setting a default
+ * interpolation in the SQL definition, e.g., `interp text DEFAULT 'linear'`
  */
 interpType
-input_interp_string(FunctionCallInfo fcinfo, int argno)
+input_interp_text(FunctionCallInfo fcinfo, int argno)
 {
   text *interp_txt = PG_GETARG_TEXT_P(argno);
-  char *interp_str = text2cstring(interp_txt);
+  assert(interp_txt);
+  char *interp_str = pg_text_to_cstring(interp_txt);
   interpType result = interptype_from_string(interp_str);
   pfree(interp_str);
   PG_FREE_IF_COPY(interp_txt, argno);
@@ -540,7 +542,7 @@ Tinstant_constructor(PG_FUNCTION_ARGS)
 {
   Datum value = PG_GETARG_ANYDATUM(0);
   TimestampTz t = PG_GETARG_TIMESTAMPTZ(1);
-  meosType temptype = oid_type(get_fn_expr_rettype(fcinfo->flinfo));
+  meosType temptype = oid_meostype(get_fn_expr_rettype(fcinfo->flinfo));
   PG_RETURN_TINSTANT_P(tinstant_make(value, temptype, t));
 }
 
@@ -556,19 +558,19 @@ Tsequence_constructor(PG_FUNCTION_ARGS)
 {
   ArrayType *array = PG_GETARG_ARRAYTYPE_P(0);
   ensure_not_empty_array(array);
-  meosType temptype = oid_type(get_fn_expr_rettype(fcinfo->flinfo));
+  meosType temptype = oid_meostype(get_fn_expr_rettype(fcinfo->flinfo));
   interpType interp = temptype_continuous(temptype) ? LINEAR : STEP;
   if (PG_NARGS() > 1 && ! PG_ARGISNULL(1))
-    interp = input_interp_string(fcinfo, 1);
+    interp = input_interp_text(fcinfo, 1);
   bool lower_inc = true, upper_inc = true;
-  if (PG_NARGS() > 2 && !PG_ARGISNULL(2))
+  if (PG_NARGS() > 2 && ! PG_ARGISNULL(2))
     lower_inc = PG_GETARG_BOOL(2);
-  if (PG_NARGS() > 3 && !PG_ARGISNULL(3))
+  if (PG_NARGS() > 3 && ! PG_ARGISNULL(3))
     upper_inc = PG_GETARG_BOOL(3);
   int count;
   TInstant **instants = (TInstant **) temparr_extract(array, &count);
-  TSequence *result = tsequence_make((const TInstant **) instants, count,
-    lower_inc, upper_inc, interp, NORMALIZE);
+  TSequence *result = tsequence_make(instants, count, lower_inc, upper_inc,
+    interp, NORMALIZE);
   pfree(instants);
   PG_FREE_IF_COPY(array, 0);
   PG_RETURN_TSEQUENCE_P(result);
@@ -588,8 +590,7 @@ Tsequenceset_constructor(PG_FUNCTION_ARGS)
   ensure_not_empty_array(array);
   int count;
   TSequence **sequences = (TSequence **) temparr_extract(array, &count);
-  TSequenceSet *result = tsequenceset_make((const TSequence **) sequences,
-    count, NORMALIZE);
+  TSequenceSet *result = tsequenceset_make(sequences, count, NORMALIZE);
   pfree(sequences);
   PG_FREE_IF_COPY(array, 0);
   PG_RETURN_TSEQUENCESET_P(result);
@@ -614,14 +615,14 @@ Tsequenceset_constructor_gaps(PG_FUNCTION_ARGS)
   ensure_not_empty_array(array);
   double maxdist = -1.0;
   Interval *maxt = NULL;
-  meosType temptype = oid_type(get_fn_expr_rettype(fcinfo->flinfo));
+  meosType temptype = oid_meostype(get_fn_expr_rettype(fcinfo->flinfo));
   interpType interp = temptype_continuous(temptype) ? LINEAR : STEP;
   if (PG_NARGS() > 1 && ! PG_ARGISNULL(1))
     maxt = PG_GETARG_INTERVAL_P(1);
   if (PG_NARGS() > 2 && ! PG_ARGISNULL(2))
     maxdist = PG_GETARG_FLOAT8(2);
   if (PG_NARGS() > 3 && ! PG_ARGISNULL(3))
-    interp = input_interp_string(fcinfo, 3);
+    interp = input_interp_text(fcinfo, 3);
 
   /* Store fcinfo into a global variable */
   /* Needed for the distance function for temporal geography points */
@@ -629,8 +630,8 @@ Tsequenceset_constructor_gaps(PG_FUNCTION_ARGS)
   /* Extract the array of instants */
   int count;
   TInstant **instants = (TInstant **) temparr_extract(array, &count);
-  TSequenceSet *result = tsequenceset_make_gaps((const TInstant **) instants,
-    count, interp, maxt, maxdist);
+  TSequenceSet *result = tsequenceset_make_gaps(instants, count, interp, maxt,
+    maxdist);
   pfree(instants);
   PG_FREE_IF_COPY(array, 0);
   PG_RETURN_TSEQUENCESET_P(result);
@@ -651,7 +652,7 @@ Tsequence_from_base_tstzset(PG_FUNCTION_ARGS)
 {
   Datum value = PG_GETARG_ANYDATUM(0);
   Set *s = PG_GETARG_SET_P(1);
-  meosType temptype = oid_type(get_fn_expr_rettype(fcinfo->flinfo));
+  meosType temptype = oid_meostype(get_fn_expr_rettype(fcinfo->flinfo));
   TSequence *result = tsequence_from_base_tstzset(value, temptype, s);
   PG_FREE_IF_COPY(s, 1);
   PG_RETURN_TSEQUENCE_P(result);
@@ -669,10 +670,10 @@ Tsequence_from_base_tstzspan(PG_FUNCTION_ARGS)
 {
   Datum value = PG_GETARG_ANYDATUM(0);
   Span *s = PG_GETARG_SPAN_P(1);
-  meosType temptype = oid_type(get_fn_expr_rettype(fcinfo->flinfo));
+  meosType temptype = oid_meostype(get_fn_expr_rettype(fcinfo->flinfo));
   interpType interp = temptype_continuous(temptype) ? LINEAR : STEP;
-  if (PG_NARGS() > 2 && !PG_ARGISNULL(2))
-    interp = input_interp_string(fcinfo, 2);
+  if (PG_NARGS() > 2 && ! PG_ARGISNULL(2))
+    interp = input_interp_text(fcinfo, 2);
   PG_RETURN_TSEQUENCE_P(tsequence_from_base_tstzspan(value, temptype, s,
     interp));
 }
@@ -690,10 +691,10 @@ Tsequenceset_from_base_tstzspanset(PG_FUNCTION_ARGS)
 {
   Datum value = PG_GETARG_ANYDATUM(0);
   SpanSet *ss = PG_GETARG_SPANSET_P(1);
-  meosType temptype = oid_type(get_fn_expr_rettype(fcinfo->flinfo));
+  meosType temptype = oid_meostype(get_fn_expr_rettype(fcinfo->flinfo));
   interpType interp = temptype_continuous(temptype) ? LINEAR : STEP;
-  if (PG_NARGS() > 2 && !PG_ARGISNULL(2))
-    interp = input_interp_string(fcinfo, 2);
+  if (PG_NARGS() > 2 && ! PG_ARGISNULL(2))
+    interp = input_interp_text(fcinfo, 2);
 
   TSequenceSet *result = tsequenceset_from_base_tstzspanset(value, temptype,
     ss, interp);
@@ -704,6 +705,30 @@ Tsequenceset_from_base_tstzspanset(PG_FUNCTION_ARGS)
 /*****************************************************************************
  * Conversion functions
  *****************************************************************************/
+
+PGDLLEXPORT Datum Temporal_from_text(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(Temporal_from_text);
+/**
+ * @ingroup mobilitydb_geo_inout
+ * @brief Return a temporal value from its Well-Known Text (WKT) representation
+ * @note This just does the same thing as the SQL function #Temporal_in, except
+ * it has to handle a 'text' input. First, unwrap the text into a cstring, then
+ * do as Temporal_in
+ * @sqlfn tboolFromText(), tintFromText(),
+ */
+Datum
+Temporal_from_text(PG_FUNCTION_ARGS)
+{
+  text *wkt_text = PG_GETARG_TEXT_P(0);
+  char *wkt = pg_text_to_cstring(wkt_text);
+  /* Copy the pointer since it will be advanced during parsing */
+  const char *wkt_ptr = wkt;
+  Oid temptypid = get_fn_expr_rettype(fcinfo->flinfo);
+  Temporal *result = temporal_in(wkt_ptr, oid_meostype(temptypid));
+  pfree(wkt);
+  PG_FREE_IF_COPY(wkt_text, 0);
+  PG_RETURN_TEMPORAL_P(result);
+}
 
 PGDLLEXPORT Datum Tbool_to_tint(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(Tbool_to_tint);
@@ -825,7 +850,7 @@ Temporal_subtype(PG_FUNCTION_ARGS)
 {
   Temporal *temp = PG_GETARG_TEMPORAL_P(0);
   const char *str = temporal_subtype(temp);
-  text *result = cstring2text(str);
+  text *result = pg_cstring_to_text(str);
   PG_FREE_IF_COPY(temp, 0);
   PG_RETURN_TEXT_P(result);
 }
@@ -842,7 +867,7 @@ Temporal_interp(PG_FUNCTION_ARGS)
 {
   Temporal *temp = PG_GETARG_TEMPORAL_P(0);
   const char *str = temporal_interp(temp);
-  text *result = cstring2text(str);
+  text *result = pg_cstring_to_text(str);
   PG_FREE_IF_COPY(temp, 0);
   PG_RETURN_TEXT_P(result);
 }
@@ -1361,9 +1386,9 @@ Temporal_instants(PG_FUNCTION_ARGS)
 #if RGEO
   TInstant **instants = (temp->temptype == T_TRGEOMETRY) ?
     trgeo_instants(temp, &count) : 
-    (TInstant **) temporal_instants_p(temp, &count);
+    (TInstant **) temporal_insts_p(temp, &count);
 #else
-  const TInstant **instants = temporal_instants_p(temp, &count);
+  const TInstant **instants = temporal_insts_p(temp, &count);
 #endif /* RGEO */
   ArrayType *result = temparr_to_array((Temporal **) instants, count, FREE);
   PG_FREE_IF_COPY(temp, 0);
@@ -1551,7 +1576,7 @@ Temporalarr_round(PG_FUNCTION_ARGS)
   int maxdd = PG_GETARG_INT32(1);
 
   Temporal **temparr = temparr_extract(array, &count);
-  Temporal **resarr = temparr_round((const Temporal **) temparr, count, maxdd);
+  Temporal **resarr = temparr_round(temparr, count, maxdd);
   ArrayType *result = temparr_to_array(resarr, count, FREE_ALL);
   pfree(temparr);
   PG_FREE_IF_COPY(array, 0);
@@ -1591,7 +1616,7 @@ Temporal_to_tsequence(PG_FUNCTION_ARGS)
   Temporal *temp = PG_GETARG_TEMPORAL_P(0);
   interpType interp = INTERP_NONE;
   if (PG_NARGS() > 1 && ! PG_ARGISNULL(1))
-    interp = input_interp_string(fcinfo, 1);
+    interp = input_interp_text(fcinfo, 1);
   TSequence *result = temporal_to_tsequence(temp, interp);
   PG_FREE_IF_COPY(temp, 0);
   PG_RETURN_TSEQUENCE_P(result);
@@ -1614,7 +1639,7 @@ Temporal_to_tsequenceset(PG_FUNCTION_ARGS)
   Temporal *temp = PG_GETARG_TEMPORAL_P(0);
   interpType interp = INTERP_NONE;
   if (PG_NARGS() > 1 && ! PG_ARGISNULL(1))
-    interp = input_interp_string(fcinfo, 1);
+    interp = input_interp_text(fcinfo, 1);
   TSequenceSet *result = temporal_to_tsequenceset(temp, interp);
   PG_FREE_IF_COPY(temp, 0);
   PG_RETURN_TSEQUENCESET_P(result);
@@ -1631,7 +1656,7 @@ Datum
 Temporal_set_interp(PG_FUNCTION_ARGS)
 {
   Temporal *temp = PG_GETARG_TEMPORAL_P(0);
-  interpType interp = input_interp_string(fcinfo, 1);
+  interpType interp = input_interp_text(fcinfo, 1);
 #if RGEO
   Temporal *result = (temp->temptype == T_TRGEOMETRY) ?
     trgeo_set_interp(temp, interp) : temporal_set_interp(temp, interp);
@@ -1877,11 +1902,11 @@ Temporal_append_tinstant(PG_FUNCTION_ARGS)
   if (PG_NARGS() == 2 || PG_ARGISNULL(2))
   {
     /* Set default interpolation according to the base type */
-    meosType temptype = oid_type(get_fn_expr_argtype(fcinfo->flinfo, 1));
+    meosType temptype = oid_meostype(get_fn_expr_argtype(fcinfo->flinfo, 1));
     interp = temptype_continuous(temptype) ? LINEAR : STEP;
   }
   else
-    interp = input_interp_string(fcinfo, 2);
+    interp = input_interp_text(fcinfo, 2);
 
 #if RGEO
   Temporal *result = (temp->temptype == T_TRGEOMETRY) ?
@@ -1956,7 +1981,7 @@ Temporal_merge_array(PG_FUNCTION_ARGS)
   ensure_not_empty_array(array);
   int count;
   Temporal **temparr = temparr_extract(array, &count);
-  Temporal *result = temporal_merge_array((const Temporal **) temparr, count);
+  Temporal *result = temporal_merge_array(temparr, count);
   pfree(temparr);
   PG_FREE_IF_COPY(array, 0);
   PG_RETURN_TEMPORAL_P(result);
@@ -1975,7 +2000,7 @@ Temporal_restrict_value(FunctionCallInfo fcinfo, bool atfunc)
 {
   Temporal *temp = PG_GETARG_TEMPORAL_P(0);
   Datum value = PG_GETARG_ANYDATUM(1);
-  meosType basetype = oid_type(get_fn_expr_argtype(fcinfo->flinfo, 1));
+  meosType basetype = oid_meostype(get_fn_expr_argtype(fcinfo->flinfo, 1));
 #if RGEO
   Temporal *result = (temp->temptype == T_TRGEOMETRY) ?
     trgeo_restrict_value(temp, value, atfunc) :
@@ -2477,6 +2502,108 @@ Temporal_minus_tstzspanset(PG_FUNCTION_ARGS)
   return Temporal_restrict_tstzspanset(fcinfo, REST_MINUS);
 }
 
+/*****************************************************************************/
+
+PGDLLEXPORT Datum Temporal_before_timestamptz(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(Temporal_before_timestamptz);
+/**
+ * @brief Return a temporal value restricted to the instants before or equal to
+ * a timestamptz
+ */
+Datum
+Temporal_before_timestamptz(PG_FUNCTION_ARGS)
+{
+  Temporal *temp = PG_GETARG_TEMPORAL_P(0);
+  TimestampTz t = PG_GETARG_TIMESTAMPTZ(1);
+  bool strict = PG_GETARG_BOOL(2);
+#if RGEO
+  Temporal *result = (temp->temptype == T_TRGEOMETRY) ?
+    trgeo_before_timestamptz(temp, t, strict) :
+    temporal_before_timestamptz(temp, t, strict);
+#else
+  Temporal *result = temporal_before_timestamptz(temp, t, strict);
+#endif /* RGEO */
+  PG_FREE_IF_COPY(temp, 0);
+  if (! result)
+    PG_RETURN_NULL();
+  PG_RETURN_TEMPORAL_P(result);
+}
+
+PGDLLEXPORT Datum Temporal_after_timestamptz(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(Temporal_after_timestamptz);
+/**
+ * @brief Return a temporal value restricted to the instants after or equal to
+ * a timestamptz
+ */
+Datum
+Temporal_after_timestamptz(PG_FUNCTION_ARGS)
+{
+  Temporal *temp = PG_GETARG_TEMPORAL_P(0);
+  TimestampTz t = PG_GETARG_TIMESTAMPTZ(1);
+  bool strict = PG_GETARG_BOOL(2);
+#if RGEO
+  Temporal *result = (temp->temptype == T_TRGEOMETRY) ?
+    trgeo_after_timestamptz(temp, t, strict) :
+    temporal_after_timestamptz(temp, t, strict);
+#else
+  Temporal *result = temporal_after_timestamptz(temp, t, strict);
+#endif /* RGEO */
+  PG_FREE_IF_COPY(temp, 0);
+  if (! result)
+    PG_RETURN_NULL();
+  PG_RETURN_TEMPORAL_P(result);
+}
+
+/*****************************************************************************
+ * Segment duration functions
+ *****************************************************************************/
+
+/**
+ * @brief Return the segments that have at least/at most a given duration
+ * @csqlfn #Temporal_segm_duration
+ * @sqlfn segmentMinDuration(), segmentMaxDuration()
+ */
+Datum
+Temporal_segm_duration(FunctionCallInfo fcinfo, bool atleast)
+{
+  Temporal *temp = PG_GETARG_TEMPORAL_P(0);
+  Interval *duration = PG_GETARG_INTERVAL_P(1);
+  bool strict = PG_GETARG_BOOL(2);
+  TSequenceSet *result = temporal_segm_duration(temp, duration, atleast,
+    strict);
+  PG_FREE_IF_COPY(temp, 0);
+  if (! result)
+    PG_RETURN_NULL();
+  PG_RETURN_TEMPORAL_P(result);
+}
+
+PGDLLEXPORT Datum Temporal_segm_min_duration(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(Temporal_segm_min_duration);
+/**
+ * @ingroup mobilitydb_temporal_math
+ * @brief Return the segments that have at least a given duration
+ * @csqlfn #Temporal_segm_min_duration
+ * @sqlfn segmentMinDuration()
+ */
+Datum
+Temporal_segm_min_duration(PG_FUNCTION_ARGS)
+{
+  return Temporal_segm_duration(fcinfo, true);
+}
+
+PGDLLEXPORT Datum Temporal_segm_max_duration(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(Temporal_segm_max_duration);
+/**
+ * @ingroup mobilitydb_temporal_math
+ * @brief Return the segments that have at most a given duration
+ * @sqlfn segmentMaxDuration()
+ */
+Datum
+Temporal_segm_max_duration(PG_FUNCTION_ARGS)
+{
+  return Temporal_segm_duration(fcinfo, false);
+}
+
 /*****************************************************************************
  * Modification functions
  *****************************************************************************/
@@ -2811,14 +2938,14 @@ PGDLLEXPORT Datum Temporal_hash(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(Temporal_hash);
 /**
  * @ingroup mobilitydb_temporal_accessor
- * @brief Return the hash value of a temporal value
+ * @brief Return the 32-bit hash value of a temporal value
  * @sqlfn tint_hash(), tfloat_hash(), ...
  */
 Datum
 Temporal_hash(PG_FUNCTION_ARGS)
 {
   Temporal *temp = PG_GETARG_TEMPORAL_P(0);
-  uint32 result = temporal_hash(temp);
+  uint32_t result = temporal_hash(temp);
   PG_FREE_IF_COPY(temp, 0);
   PG_RETURN_UINT32(result);
 }

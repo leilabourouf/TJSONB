@@ -59,9 +59,9 @@ PG_FUNCTION_INFO_V1(Span_extent_transfn);
 Datum
 Span_extent_transfn(PG_FUNCTION_ARGS)
 {
-  Span *s1 = PG_ARGISNULL(0) ? NULL : PG_GETARG_SPAN_P(0);
-  Span *s2 = PG_ARGISNULL(1) ? NULL : PG_GETARG_SPAN_P(1);
-  Span *result = span_extent_transfn(s1, s2);
+  Span *sp1 = PG_ARGISNULL(0) ? NULL : PG_GETARG_SPAN_P(0);
+  Span *sp2 = PG_ARGISNULL(1) ? NULL : PG_GETARG_SPAN_P(1);
+  Span *result = span_extent_transfn(sp1, sp2);
   if (! result)
     PG_RETURN_NULL();
   PG_RETURN_SPAN_P(result);
@@ -77,16 +77,16 @@ PG_FUNCTION_INFO_V1(Span_extent_combinefn);
 Datum
 Span_extent_combinefn(PG_FUNCTION_ARGS)
 {
-  Span *s1 = PG_ARGISNULL(0) ? NULL : PG_GETARG_SPAN_P(0);
-  Span *s2 = PG_ARGISNULL(1) ? NULL : PG_GETARG_SPAN_P(1);
-  if (! s2 && ! s1)
+  Span *sp1 = PG_ARGISNULL(0) ? NULL : PG_GETARG_SPAN_P(0);
+  Span *sp2 = PG_ARGISNULL(1) ? NULL : PG_GETARG_SPAN_P(1);
+  if (! sp2 && ! sp1)
     PG_RETURN_NULL();
-  if (s1 && ! s2)
-    PG_RETURN_SPAN_P(s1);
-  if (s2 && ! s1)
-    PG_RETURN_SPAN_P(s2);
+  if (sp1 && ! sp2)
+    PG_RETURN_SPAN_P(sp1);
+  if (sp2 && ! sp1)
+    PG_RETURN_SPAN_P(sp2);
   /* Non-strict union */
-  PG_RETURN_SPAN_P(super_union_span_span(s1, s2));
+  PG_RETURN_SPAN_P(super_union_span_span(sp1, sp2));
 }
 
 /*****************************************************************************/
@@ -107,7 +107,7 @@ Spanbase_extent_transfn(PG_FUNCTION_ARGS)
   if (PG_ARGISNULL(1))
     PG_RETURN_SPAN_P(s);
   Datum value = PG_GETARG_DATUM(1);
-  meosType basetype = oid_type(get_fn_expr_argtype(fcinfo->flinfo, 1));
+  meosType basetype = oid_meostype(get_fn_expr_argtype(fcinfo->flinfo, 1));
   PG_RETURN_SPAN_P(spanbase_extent_transfn(s, value, basetype));
 }
 
@@ -179,10 +179,10 @@ Spanset_union_transfn(PG_FUNCTION_ARGS)
     elog(ERROR, "Spanset_union_transfn called in non-aggregate context");
 
   Oid spansetoid = get_fn_expr_argtype(fcinfo->flinfo, 1);
-  meosType spansettype = oid_type(spansetoid);
+  meosType spansettype = oid_meostype(spansetoid);
   assert(spanset_type(spansettype));
   meosType spantype = spansettype_spantype(spansettype);
-  Oid spanoid = type_oid(spantype);
+  Oid spanoid = meostype_oid(spantype);
 
   ArrayBuildState *state;
   if (PG_ARGISNULL(0))

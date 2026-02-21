@@ -37,6 +37,7 @@
 
 /* PostgreSQL */
 #include <postgres.h>
+#include <pgtypes.h>
 #include <access/htup_details.h>
 #include <access/tupdesc.h>    /* for * () */
 #include <executor/executor.h>  /* for GetAttributeByName() */
@@ -74,7 +75,7 @@ Create_trip(PG_FUNCTION_ARGS)
   TimestampTz t = PG_GETARG_TIMESTAMPTZ(1);
   bool disturbData = PG_GETARG_BOOL(2);
   text *messages = PG_GETARG_TEXT_PP(3);
-  char *msgstr = text2cstring(messages);
+  char *msgstr = pg_text_to_cstring(messages);
   int32 msg = 0; /* 'minimal' by default */
   Datum *datums;
   bool *nulls;
@@ -98,7 +99,7 @@ Create_trip(PG_FUNCTION_ARGS)
   TupleDesc tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
   /* Verify the type of the attributes */
   att = TupleDescAttr(tupdesc, 0);
-  if (att->atttypid != type_oid(T_GEOMETRY))
+  if (att->atttypid != meostype_oid(T_GEOMETRY))
   {
     PG_FREE_IF_COPY(array, 0);
     ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),

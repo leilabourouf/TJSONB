@@ -40,6 +40,7 @@
 #include <assert.h>
 /* PostgreSQL */
 #include <postgres.h>
+#include <pgtypes.h>
 #include <catalog/pg_type_d.h>
 #include <utils/rangetypes.h>
 #include <utils/timestamp.h>
@@ -72,7 +73,7 @@ Span_in(PG_FUNCTION_ARGS)
 {
   const char *str = PG_GETARG_CSTRING(0);
   Oid spantypid = PG_GETARG_OID(1);
-  PG_RETURN_SPAN_P(span_in(str, oid_type(spantypid)));
+  PG_RETURN_SPAN_P(span_in(str, oid_meostype(spantypid)));
 }
 
 PGDLLEXPORT Datum Span_out(PG_FUNCTION_ARGS);
@@ -145,7 +146,7 @@ Span_as_text(PG_FUNCTION_ARGS)
   if (PG_NARGS() > 1 && ! PG_ARGISNULL(1))
     dbl_dig_for_wkt = PG_GETARG_INT32(1);
   char *str = span_out(s, Int32GetDatum(dbl_dig_for_wkt));
-  text *result = cstring2text(str);
+  text *result = pg_cstring_to_text(str);
   pfree(str);
   PG_RETURN_TEXT_P(result);
 }
@@ -181,7 +182,7 @@ Datum
 Span_from_hexwkb(PG_FUNCTION_ARGS)
 {
   text *hexwkb_text = PG_GETARG_TEXT_P(0);
-  char *hexwkb = text2cstring(hexwkb_text);
+  char *hexwkb = pg_text_to_cstring(hexwkb_text);
   Span *result = span_from_hexwkb(hexwkb);
   pfree(hexwkb);
   PG_FREE_IF_COPY(hexwkb_text, 0);
@@ -238,7 +239,7 @@ Span_constructor(PG_FUNCTION_ARGS)
   Datum upper = PG_GETARG_DATUM(1);
   bool lower_inc = PG_GETARG_BOOL(2);
   bool upper_inc = PG_GETARG_BOOL(3);
-  meosType spantype = oid_type(get_fn_expr_rettype(fcinfo->flinfo));
+  meosType spantype = oid_meostype(get_fn_expr_rettype(fcinfo->flinfo));
   meosType basetype = spantype_basetype(spantype);
   PG_RETURN_SPAN_P(span_make(lower, upper, lower_inc, upper_inc, basetype));
 }
@@ -259,7 +260,7 @@ Datum
 Value_to_span(PG_FUNCTION_ARGS)
 {
   Datum value = PG_GETARG_DATUM(0);
-  meosType basetype = oid_type(get_fn_expr_argtype(fcinfo->flinfo, 0));
+  meosType basetype = oid_meostype(get_fn_expr_argtype(fcinfo->flinfo, 0));
   PG_RETURN_SPAN_P(value_span(value, basetype));
 }
 
@@ -780,7 +781,7 @@ Float_round(PG_FUNCTION_ARGS)
 {
   double d = PG_GETARG_FLOAT8(0);
   int maxdd = PG_GETARG_INT32(1);
-  PG_RETURN_FLOAT8(float_round(d, maxdd));
+  PG_RETURN_FLOAT8(float8_round(d, maxdd));
 }
 
 PGDLLEXPORT Datum Floatspan_round(PG_FUNCTION_ARGS);
@@ -845,9 +846,9 @@ PG_FUNCTION_INFO_V1(Span_eq);
 Datum
 Span_eq(PG_FUNCTION_ARGS)
 {
-  Span *s1 = PG_GETARG_SPAN_P(0);
-  Span *s2 = PG_GETARG_SPAN_P(1);
-  PG_RETURN_BOOL(span_eq(s1, s2));
+  Span *sp1 = PG_GETARG_SPAN_P(0);
+  Span *sp2 = PG_GETARG_SPAN_P(1);
+  PG_RETURN_BOOL(span_eq(sp1, sp2));
 }
 
 PGDLLEXPORT Datum Span_ne(PG_FUNCTION_ARGS);
@@ -861,9 +862,9 @@ PG_FUNCTION_INFO_V1(Span_ne);
 Datum
 Span_ne(PG_FUNCTION_ARGS)
 {
-  Span *s1 = PG_GETARG_SPAN_P(0);
-  Span *s2 = PG_GETARG_SPAN_P(1);
-  PG_RETURN_BOOL(span_ne(s1, s2));
+  Span *sp1 = PG_GETARG_SPAN_P(0);
+  Span *sp2 = PG_GETARG_SPAN_P(1);
+  PG_RETURN_BOOL(span_ne(sp1, sp2));
 }
 
 PGDLLEXPORT Datum Span_cmp(PG_FUNCTION_ARGS);
@@ -877,9 +878,9 @@ PG_FUNCTION_INFO_V1(Span_cmp);
 Datum
 Span_cmp(PG_FUNCTION_ARGS)
 {
-  Span *s1 = PG_GETARG_SPAN_P(0);
-  Span *s2 = PG_GETARG_SPAN_P(1);
-  PG_RETURN_INT32(span_cmp(s1, s2));
+  Span *sp1 = PG_GETARG_SPAN_P(0);
+  Span *sp2 = PG_GETARG_SPAN_P(1);
+  PG_RETURN_INT32(span_cmp(sp1, sp2));
 }
 
 PGDLLEXPORT Datum Span_lt(PG_FUNCTION_ARGS);
@@ -893,9 +894,9 @@ PG_FUNCTION_INFO_V1(Span_lt);
 Datum
 Span_lt(PG_FUNCTION_ARGS)
 {
-  Span *s1 = PG_GETARG_SPAN_P(0);
-  Span *s2 = PG_GETARG_SPAN_P(1);
-  PG_RETURN_BOOL(span_lt(s1, s2));
+  Span *sp1 = PG_GETARG_SPAN_P(0);
+  Span *sp2 = PG_GETARG_SPAN_P(1);
+  PG_RETURN_BOOL(span_lt(sp1, sp2));
 }
 
 PGDLLEXPORT Datum Span_le(PG_FUNCTION_ARGS);
@@ -909,9 +910,9 @@ PG_FUNCTION_INFO_V1(Span_le);
 Datum
 Span_le(PG_FUNCTION_ARGS)
 {
-  Span *s1 = PG_GETARG_SPAN_P(0);
-  Span *s2 = PG_GETARG_SPAN_P(1);
-  PG_RETURN_BOOL(span_le(s1, s2));
+  Span *sp1 = PG_GETARG_SPAN_P(0);
+  Span *sp2 = PG_GETARG_SPAN_P(1);
+  PG_RETURN_BOOL(span_le(sp1, sp2));
 }
 
 PGDLLEXPORT Datum Span_ge(PG_FUNCTION_ARGS);
@@ -926,9 +927,9 @@ PG_FUNCTION_INFO_V1(Span_ge);
 Datum
 Span_ge(PG_FUNCTION_ARGS)
 {
-  Span *s1 = PG_GETARG_SPAN_P(0);
-  Span *s2 = PG_GETARG_SPAN_P(1);
-  PG_RETURN_BOOL(span_ge(s1, s2));
+  Span *sp1 = PG_GETARG_SPAN_P(0);
+  Span *sp2 = PG_GETARG_SPAN_P(1);
+  PG_RETURN_BOOL(span_ge(sp1, sp2));
 }
 
 PGDLLEXPORT Datum Span_gt(PG_FUNCTION_ARGS);
@@ -942,9 +943,9 @@ PG_FUNCTION_INFO_V1(Span_gt);
 Datum
 Span_gt(PG_FUNCTION_ARGS)
 {
-  Span *s1 = PG_GETARG_SPAN_P(0);
-  Span *s2 = PG_GETARG_SPAN_P(1);
-  PG_RETURN_BOOL(span_gt(s1, s2));
+  Span *sp1 = PG_GETARG_SPAN_P(0);
+  Span *sp2 = PG_GETARG_SPAN_P(1);
+  PG_RETURN_BOOL(span_gt(sp1, sp2));
 }
 
 /*****************************************************************************
@@ -961,8 +962,8 @@ PG_FUNCTION_INFO_V1(Span_hash);
 Datum
 Span_hash(PG_FUNCTION_ARGS)
 {
-  Span *s = PG_GETARG_SPAN_P(0);
-  PG_RETURN_UINT32(span_hash(s));
+  Span *sp = PG_GETARG_SPAN_P(0);
+  PG_RETURN_UINT32(span_hash(sp));
 }
 
 PGDLLEXPORT Datum Span_hash_extended(PG_FUNCTION_ARGS);
@@ -975,9 +976,9 @@ PG_FUNCTION_INFO_V1(Span_hash_extended);
 Datum
 Span_hash_extended(PG_FUNCTION_ARGS)
 {
-  Span *s = PG_GETARG_SPAN_P(0);
-  uint64 seed = PG_GETARG_INT64(1);
-  PG_RETURN_UINT64(span_hash_extended(s, seed));
+  Span *sp = PG_GETARG_SPAN_P(0);
+  uint64_t seed = PG_GETARG_INT64(1);
+  PG_RETURN_UINT64(span_hash_extended(sp, seed));
 }
 
 /******************************************************************************/

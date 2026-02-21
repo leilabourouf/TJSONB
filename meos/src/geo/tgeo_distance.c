@@ -392,7 +392,6 @@ tdistance_tgeo_geo(const Temporal *temp, const GSERIALIZED *gs)
   LiftedFunctionInfo lfinfo;
   memset(&lfinfo, 0, sizeof(LiftedFunctionInfo));
   lfinfo.func = (varfunc) geo_distance_fn(temp->flags);
-  lfinfo.numparam = 0;
   lfinfo.argtype[0] = temp->temptype;
   lfinfo.argtype[1] = temptype_basetype(temp->temptype);
   lfinfo.restype = T_TFLOAT;
@@ -422,7 +421,6 @@ tdistance_tgeo_tgeo(const Temporal *temp1, const Temporal *temp2)
   LiftedFunctionInfo lfinfo;
   memset(&lfinfo, 0, sizeof(LiftedFunctionInfo));
   lfinfo.func = (varfunc) geo_distance_fn(temp1->flags);
-  lfinfo.numparam = 0;
   lfinfo.argtype[0] = lfinfo.argtype[1] = temp1->temptype;
   lfinfo.restype = T_TFLOAT;
   lfinfo.reslinear = MEOS_FLAGS_LINEAR_INTERP(temp1->flags) ||
@@ -707,12 +705,13 @@ nai_tgeo_tgeo(const Temporal *temp1, const Temporal *temp2)
   if (dist == NULL)
     return NULL;
 
-  const TInstant *min = temporal_min_instant(dist);
+  const TInstant *min = temporal_min_inst_p(dist);
+  TimestampTz t = min->t;
   pfree(dist);
   /* The closest point may be at an exclusive bound => 3rd argument = false */
   Datum value;
-  temporal_value_at_timestamptz(temp1, min->t, false, &value);
-  return tinstant_make_free(value, temp1->temptype, min->t);
+  temporal_value_at_timestamptz(temp1, t, false, &value);
+  return tinstant_make_free(value, temp1->temptype, t);
 }
 
 /*****************************************************************************
@@ -831,11 +830,11 @@ nad_tgeo_stbox(const Temporal *temp, const STBox *box)
 
   /* Project the temporal geo to the timespan of the box */
   bool hast = MEOS_FLAGS_GET_T(box->flags);
-  Span p, inter;
+  Span sp, inter;
   if (hast)
   {
-    temporal_set_tstzspan(temp, &p);
-    if (! inter_span_span(&p, &box->period, &inter))
+    temporal_set_tstzspan(temp, &sp);
+    if (! inter_span_span(&sp, &box->period, &inter))
       return DBL_MAX;
   }
 
@@ -978,14 +977,15 @@ shortestline_tgeo_tgeo(const Temporal *temp1, const Temporal *temp2)
   Temporal *dist = tdistance_tgeo_tgeo(temp1, temp2);
   if (dist == NULL)
     return NULL;
-  const TInstant *inst = temporal_min_instant(dist);
+  const TInstant *inst = temporal_min_inst_p(dist);
   /* Timestamp t may be at an exclusive bound */
   Datum value1, value2;
   temporal_value_at_timestamptz(temp1, inst->t, false, &value1);
   temporal_value_at_timestamptz(temp2, inst->t, false, &value2);
   LWGEOM *line = (LWGEOM *) lwline_make(value1, value2);
   GSERIALIZED *result = geo_serialize(line);
-  lwgeom_free(line);
+  pfree(DatumGetPointer(value1)); pfree(DatumGetPointer(value2)); 
+  pfree(dist); lwgeom_free(line);
   return result;
 }
 

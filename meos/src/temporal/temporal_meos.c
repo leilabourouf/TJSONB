@@ -39,16 +39,17 @@
 #include <float.h>
 #include <limits.h>
 /* PostgreSQL */
+#include <postgres.h>
 #include <utils/float.h>
 #if POSTGRESQL_VERSION_NUMBER >= 160000
   #include "varatt.h"
 #endif
+#include "utils/varlena.h"
 /* MEOS */
 #include <meos.h>
 #include <meos_internal.h>
 #include "temporal/doxygen_meos.h"
 #include "temporal/lifting.h"
-#include "temporal/postgres_types.h"
 #include "temporal/temporal_boxops.h"
 #include "temporal/temporal_tile.h"
 #include "temporal/tinstant.h"
@@ -56,6 +57,10 @@
 #include "temporal/tsequenceset.h"
 #include "temporal/type_parser.h"
 #include "temporal/type_util.h"
+
+#include <utils/jsonb.h>
+#include <utils/numeric.h>
+#include <pgtypes.h>
 
 /*****************************************************************************
  * Input/output functions
@@ -400,7 +405,7 @@ tfloat_values(const Temporal *temp, int *count)
 
 /**
  * @ingroup meos_temporal_accessor
- * @brief Return the array of copies of base values of a temporal text
+ * @brief Return an array of copies of the base values of a temporal text
  * @param[in] temp Temporal value
  * @param[out] count Number of values in the output array
  * @csqlfn #Temporal_valueset()

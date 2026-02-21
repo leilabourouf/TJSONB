@@ -36,6 +36,7 @@
 
 /* PostgreSQL */
 #include <postgres.h>
+#include <pgtypes.h>
 #include <utils/float.h>
 /* MEOS */
 #include <meos.h>
@@ -431,7 +432,29 @@ Float_angular_difference(PG_FUNCTION_ARGS)
 {
   double degrees1 = PG_GETARG_FLOAT8(0);
   double degrees2 = PG_GETARG_FLOAT8(1);
-  PG_RETURN_FLOAT8(float_angular_difference(degrees1, degrees2));
+  PG_RETURN_FLOAT8(float8_angular_difference(degrees1, degrees2));
+}
+
+/*****************************************************************************
+ * Trend function
+ *****************************************************************************/
+
+PGDLLEXPORT Datum Tnumber_trend(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(Tnumber_trend);
+/**
+ * @ingroup mobilitydb_temporal_math
+ * @brief Return the trend of a temporal number
+ * @sqlfn trend()
+ */
+Datum
+Tnumber_trend(PG_FUNCTION_ARGS)
+{
+  Temporal *temp = PG_GETARG_TEMPORAL_P(0);
+  Temporal *result = tnumber_trend(temp);
+  PG_FREE_IF_COPY(temp, 0);
+  if (! result)
+    PG_RETURN_NULL();
+  PG_RETURN_TEMPORAL_P(result);
 }
 
 /*****************************************************************************

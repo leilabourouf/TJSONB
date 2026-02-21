@@ -36,8 +36,10 @@
 
 /* C */
 #include <assert.h>
+#include <limits.h>
 /* PostgreSQL */
 #include <postgres.h>
+#include "port/pg_bitutils.h"
 #include <utils/timestamp.h>
 #include <common/hashfn.h>
 #if POSTGRESQL_VERSION_NUMBER >= 160000
@@ -48,12 +50,15 @@
 #include <meos_internal.h>
 #include <meos_internal_geo.h>
 #include "temporal/meos_catalog.h"
-#include "temporal/postgres_types.h"
 #include "temporal/tsequence.h"
 #include "temporal/type_parser.h"
 #include "temporal/type_util.h"
 #include "geo/tgeo_spatialfuncs.h"
 #include "geo/tspatial_parser.h"
+
+#include <utils/jsonb.h>
+#include <utils/numeric.h>
+#include <pgtypes.h>
 
 /*****************************************************************************
  * General functions
@@ -148,20 +153,26 @@ tinstant_in(const char *str, meosType temptype)
  * @brief Return the Well-Known Text (WKT) representation of a temporal instant
  * @param[in] inst Temporal instant
  * @param[in] maxdd Maximum number of decimal digits
- * @param[in] value_out Function called to output the base value depending on
+ * @param[in] base_out_fn Function called to output the base value depending on
  * its type
  */
 char *
-tinstant_to_string(const TInstant *inst, int maxdd, outfunc value_out)
+tinstant_to_string(const TInstant *inst, int maxdd, outfunc base_out_fn)
 {
   assert(inst); assert(maxdd >= 0);
   char *t = pg_timestamptz_out(inst->t);
   meosType basetype = temptype_basetype(inst->temptype);
-  char *value = value_out(tinstant_value_p(inst), basetype, maxdd);
-  size_t size = strlen(value) + strlen(t) + 2;
+  char *value = base_out_fn(tinstant_value_p(inst), basetype, maxdd);
+  /* tjsonb instant need to be ouput between quotes */
+  char *quoted = NULL;
+  if (inst->temptype == T_TJSONB)
+    quoted = string_escape(value, QUOTES);
+  size_t size = (quoted ? strlen(quoted) : strlen(value)) + strlen(t) + 2;
   char *result = palloc(size);
   snprintf(result, size, "%s@%s", value, t);
   pfree(t); pfree(value);
+  if (quoted)
+    pfree(quoted);
   return result;
 }
 
@@ -236,7 +247,7 @@ tinstant_make(Datum value, meosType temptype, TimestampTz t)
   else
   {
     /* For base types passed by reference */
-    int16 typlen = basetype_length(basetype);
+    int16_t typlen = basetype_length(basetype);
     value_from = DatumGetPointer(value);
     value_size = (typlen != -1) ? DOUBLE_PAD((unsigned int) typlen) :
       DOUBLE_PAD(VARSIZE(value_from));
@@ -257,7 +268,7 @@ tinstant_make(Datum value, meosType temptype, TimestampTz t)
   // TODO Should we bypass the tests on tnpoint ?
   if (tspatial_type(temptype) && temptype != T_TNPOINT)
   {
-    int16 flags = spatial_flags(value, basetype);
+    int16_t flags = spatial_flags(value, basetype);
     MEOS_FLAGS_SET_Z(result->flags, MEOS_FLAGS_GET_Z(flags));
     MEOS_FLAGS_SET_GEODETIC(result->flags, MEOS_FLAGS_GET_GEODETIC(flags));
   }
@@ -350,14 +361,14 @@ tinstant_time(const TInstant *inst)
  * @ingroup meos_internal_temporal_accessor
  * @brief Return in the last argument the time span of a temporal instant
  * @param[in] inst Temporal instant
- * @param[out] s Result
+ * @param[out] result Result
  */
 void
-tinstant_set_tstzspan(const TInstant *inst, Span *s)
+tinstant_set_tstzspan(const TInstant *inst, Span *result)
 {
-  assert(inst); assert(s);
+  assert(inst); assert(result);
   span_set(TimestampTzGetDatum(inst->t), TimestampTzGetDatum(inst->t),
-    true, true, T_TIMESTAMPTZ, T_TSTZSPAN, s);
+    true, true, T_TIMESTAMPTZ, T_TSTZSPAN, result);
   return;
 }
 
@@ -417,6 +428,46 @@ tinstant_value_at_timestamptz(const TInstant *inst, TimestampTz t,
     return false;
   *result = tinstant_value(inst);
   return true;
+}
+
+/*****************************************************************************/
+
+/**
+ * @ingroup meos_internal_temporal_restrict
+ * @brief Restrict a temporal value to the instants before or equal a
+ * timestamptz
+ * @param[in] inst Temporal instant
+ * @param[in] t Timestamp
+ * @param[in] strict True if the restriction is strictly before, false when
+ * the restriction is before or equal
+ * @csqlfn #Temporal_before_timestamptz()
+ */
+TInstant *
+tinstant_before_timestamptz(const TInstant *inst, TimestampTz t, bool strict)
+{
+  assert(inst);
+  if (inst->t < t || (! strict && t == inst->t))
+    return tinstant_copy(inst);
+  return NULL;
+}
+
+/**
+ * @ingroup meos_internal_temporal_restrict
+ * @brief Restrict a temporal value to the instants after or equal a
+ * timestamptz
+ * @param[in] inst Temporal instant
+ * @param[in] t Timestamp
+ * @param[in] strict True if the restriction is strictly after, false when
+ * the restriction is after or equal
+ * @csqlfn #Temporal_after_timestamptz()
+ */
+TInstant *
+tinstant_after_timestamptz(const TInstant *inst, TimestampTz t, bool strict)
+{
+  assert(inst);
+  if (inst->t > t|| (! strict && t == inst->t))
+    return tinstant_copy(inst);
+  return NULL;
 }
 
 /*****************************************************************************
@@ -492,7 +543,7 @@ tinstant_shift_time(const TInstant *inst, const Interval *interv)
 {
   assert(inst); assert(interv);
   TInstant *result = tinstant_copy(inst);
-  result->t = add_timestamptz_interval(inst->t, interv);
+  result->t = add_timestamptz_interval(inst->t, (Interval *) interv);
   return result;
 }
 
@@ -550,7 +601,7 @@ tinstant_eq(const TInstant *inst1, const TInstant *inst2)
 /**
  * @ingroup meos_internal_temporal_comp_trad
  * @brief Return -1, 0, or 1 depending on whether the first temporal instant is
- * less than, equal, or greater than the second one
+ * less than, equal to, or greater than the second one
  * @param[in] inst1,inst2 Temporal instants
  * @pre The arguments are of the same base type
  * @note The internal B-tree comparator is not used to increase efficiency.
@@ -589,22 +640,29 @@ tinstant_cmp(const TInstant *inst1, const TInstant *inst2)
 
 /**
  * @ingroup meos_internal_temporal_accessor
- * @brief Return the 32-bit hash value of a temporal instant
+ * @brief Return the 32-bit hash of a temporal instant
  * @param[in] inst Temporal instant
+ * @return On error return @p INT_MAX
  * @csqlfn #Temporal_hash()
  */
-uint32
+uint32_t
 tinstant_hash(const TInstant *inst)
 {
-  assert(inst);
+  /* Ensure the validity of the arguments */
+  VALIDATE_NOT_NULL(inst, INT_MAX);
+
   meosType basetype = temptype_basetype(inst->temptype);
   /* Apply the hash function to the base type */
-  uint32 value_hash = datum_hash(tinstant_value_p(inst), basetype);
+  uint32_t value_hash = datum_hash(tinstant_value_p(inst), basetype);
   /* Apply the hash function to the timestamp */
-  uint32 time_hash = pg_hashint8(inst->t);
+  uint32_t time_hash = int64_hash(inst->t);
   /* Merge hashes of value and timestamp */
-  uint32 result = value_hash;
-  result = (result << 1) | (result >> 31);
+  uint32_t result = value_hash;
+#if POSTGRESQL_VERSION_NUMBER >= 150000
+  result = pg_rotate_left32(result, 1);
+#else
+  result =  (result << 1) | (result >> 31);
+#endif
   result ^= time_hash;
   return result;
 }

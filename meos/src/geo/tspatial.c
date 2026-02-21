@@ -44,7 +44,6 @@
 #include <meos.h>
 #include <meos_internal.h>
 #include <meos_internal_geo.h>
-#include "temporal/postgres_types.h"
 #include "temporal/set.h"
 #include "temporal/lifting.h"
 #include "temporal/temporal.h"
@@ -68,6 +67,10 @@
   #include "rgeo/trgeo_inst.h"
   #include "rgeo/trgeo_boxops.h"
 #endif 
+
+#include <utils/jsonb.h>
+#include <utils/numeric.h>
+#include <pgtypes.h>
 
 /*****************************************************************************
  * Input/output functions
@@ -122,7 +125,7 @@ spatialbase_as_ewkt(Datum value, meosType type, int maxdd)
   /* Get the SRID */
   char srid_str[18];
   srid_str[0] = '\0';
-  int32 srid = spatial_srid(value, type);
+  int32_t srid = spatial_srid(value, type);
   if (srid <= 0)
     return base_str;
 
@@ -160,7 +163,7 @@ spatialset_out_fn(const Set *s, int maxdd, outfunc wkt_out, bool extended)
   /* Get the SRID if extended */
   char srid_str[18];
   srid_str[0] = '\0';
-  int32 srid = spatialset_srid(s);
+  int32_t srid = spatialset_srid(s);
   if (srid <= 0)
     return set_str;
 
@@ -188,7 +191,8 @@ spatialset_as_text(const Set *s, int maxdd)
 
 /**
  * @ingroup meos_geo_set_inout
- * @brief Return the Extended Well-Known Text (EWKT) representation of a geo set
+ * @brief Return the Extended Well-Known Text (EWKT) representation of a
+ * spatial set
  * @param[in] s Set
  * @param[in] maxdd Maximum number of decimal digits
  * @csqlfn #Spatialset_as_ewkt()

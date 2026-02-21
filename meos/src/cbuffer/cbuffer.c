@@ -40,16 +40,18 @@
 #include <limits.h>
 /* PostgreSQL */
 #include <postgres.h>
+#include <pgtypes.h>
 #if POSTGRESQL_VERSION_NUMBER >= 160000
   #include "varatt.h"
 #endif
-#include <common/hashfn.h>
+#include "common/hashfn.h"
+#include "port/pg_bitutils.h"
 /* PostGIS */
 #include <liblwgeom.h>
 /* MEOS */
 #include <meos.h>
 #include <meos_internal_geo.h>
-#include "temporal/postgres_types.h"
+#include <pgtypes.h>
 #include "temporal/set.h"
 #include "temporal/tsequence.h"
 #include "temporal/type_inout.h"
@@ -252,7 +254,7 @@ cbuffer_parse(const char **str, bool end)
   p_whitespace(str);
   GSERIALIZED *gs;
   /* The following call consumes also the separator passed as parameter */
-  if (! geo_parse(str, T_GEOMETRY, ',', &srid, &gs))
+  if (! geo_parse(str, T_GEOMETRY, ",", &srid, &gs))
     return NULL;
   if (! ensure_point_type(gs) || ! ensure_not_empty(gs) ||
       ! ensure_has_not_Z_geo(gs) || ! ensure_has_not_M_geo(gs))
@@ -266,7 +268,7 @@ cbuffer_parse(const char **str, bool end)
   /* Parse radius */
   p_whitespace(str);
   Datum d;
-  if (! basetype_parse(str, T_FLOAT8, ')', &d))
+  if (! basetype_parse(str, T_FLOAT8, ")", &d))
     return NULL;
   double radius = DatumGetFloat8(d);
   if (radius < 0)
@@ -590,7 +592,7 @@ geom_to_cbuffer(const GSERIALIZED *gs)
  * @param[in] count Number of elements in the input array
  */
 GSERIALIZED *
-cbufferarr_to_geom(const Cbuffer **cbarr, int count)
+cbufferarr_to_geom(Cbuffer **cbarr, int count)
 {
   assert(cbarr); assert(count > 1);
   GSERIALIZED **geoms = palloc(sizeof(GSERIALIZED *) * count);
@@ -759,8 +761,10 @@ cbuffer_round(const Cbuffer *cb, int maxdd)
 
   /* Set precision of the point and the radius */
   GSERIALIZED *point = point_round((GSERIALIZED *) (&cb->point), maxdd);
-  double radius = float_round(cb->radius, maxdd);
-  return cbuffer_make(point, radius);
+  double radius = float8_round(cb->radius, maxdd);
+  Cbuffer *result = cbuffer_make(point, radius);
+  pfree(point);
+  return result;
 }
 
 /**
@@ -786,7 +790,7 @@ datum_cbuffer_round(Datum cbuffer, Datum size)
  * @csqlfn #Cbufferarr_round()
  */
 Cbuffer **
-cbufferarr_round(const Cbuffer **cbarr, int count, int maxdd)
+cbufferarr_round(Cbuffer **cbarr, int count, int maxdd)
 {
   /* Ensure the validity of the arguments */
   VALIDATE_NOT_NULL(cbarr, NULL);
@@ -1074,8 +1078,8 @@ point_inside_circle(const POINT2D *center, double radius, double x, double y)
 int
 cbuffer_contains(const Cbuffer *cb1, const Cbuffer *cb2)
 {
-  const GSERIALIZED *point1 = cbuffer_point(cb1);
-  const GSERIALIZED *point2 = cbuffer_point(cb2);
+  const GSERIALIZED *point1 = cbuffer_point_p(cb1);
+  const GSERIALIZED *point2 = cbuffer_point_p(cb2);
   const POINT2D *pt1 = (POINT2D *) GS_POINT_PTR(point1);
   const POINT2D *pt2 = (POINT2D *) GS_POINT_PTR(point2);
   if (! point_inside_circle(pt1, cb1->radius, pt2->x - cb2->radius, pt2->y) ||
@@ -1096,8 +1100,8 @@ cbuffer_contains(const Cbuffer *cb1, const Cbuffer *cb2)
 int
 cbuffer_covers(const Cbuffer *cb1, const Cbuffer *cb2)
 {
-  const GSERIALIZED *point1 = cbuffer_point(cb1);
-  const GSERIALIZED *point2 = cbuffer_point(cb2);
+  const GSERIALIZED *point1 = cbuffer_point_p(cb1);
+  const GSERIALIZED *point2 = cbuffer_point_p(cb2);
   const POINT2D *pt1 = (POINT2D *) GS_POINT_PTR(point1);
   const POINT2D *pt2 = (POINT2D *) GS_POINT_PTR(point2);
   if (! point_in_circle(pt1, cb1->radius, pt2->x - cb2->radius, pt2->y) ||
@@ -1502,7 +1506,7 @@ cbuffer_ge(const Cbuffer *cb1, const Cbuffer *cb2)
  * @brief Return the 32-bit hash value of a circular buffer
  * @param[in] cb Circular buffer
  */
-uint32
+uint32_t
 cbuffer_hash(const Cbuffer *cb)
 {
   /* Ensure the validity of the arguments */
@@ -1510,12 +1514,16 @@ cbuffer_hash(const Cbuffer *cb)
 
   /* Compute hashes of value and radius */
   Datum d = PointerGetDatum(&cb->point);
-  uint32 point_hash = gserialized_hash(DatumGetGserializedP(d));
-  uint32 radius_hash = pg_hashfloat8(cb->radius);
+  uint32_t point_hash = gserialized_hash(DatumGetGserializedP(d));
+  uint32_t radius_hash = float8_hash(cb->radius);
 
   /* Merge hashes of value and radius */
-  uint32 result = point_hash;
-  result = (result << 1) | (result >> 31);
+  uint32_t result = point_hash;
+#if POSTGRESQL_VERSION_NUMBER >= 150000
+  result = pg_rotate_left32(result, 1);
+#else
+  result =  (result << 1) | (result >> 31);
+#endif
   result ^= radius_hash;
   return result;
 }
@@ -1527,8 +1535,8 @@ cbuffer_hash(const Cbuffer *cb)
  * @param[in] seed Seed
  * csqlfn hash_extended
  */
-uint64
-cbuffer_hash_extended(const Cbuffer *cb, uint64 seed)
+uint64_t
+cbuffer_hash_extended(const Cbuffer *cb, uint64_t seed)
 {
   /* Ensure the validity of the arguments */
   VALIDATE_NOT_NULL(cb, LONG_MAX);

@@ -1,3 +1,11 @@
 build/
 .cache
 .vscode
+
+# macOS debug bundles
+*.dSYM/
+
+# Test binaries
+meos/tests/*_test
+meos/tests/*_test.dSYM/
+

@@ -40,10 +40,12 @@
 /* C */
 #include <assert.h>
 /* PostgreSQL */
+#include <postgres.h>
+#include <pgtypes.h>
 #include <access/htup_details.h>
-#include "utils/syscache.h"
 #include <utils/lsyscache.h>
 #include <catalog/pg_statistic.h>
+#include "utils/syscache.h"
 /* MEOS */
 #include <meos.h>
 #include <meos_internal.h>
@@ -53,6 +55,10 @@
 #include "pg_temporal/meos_catalog.h"
 #include "pg_temporal/span_analyze.h"
 #include "pg_temporal/temporal_selfuncs.h"
+
+/* To avoid conflicts while importing builtins.h */
+extern char *text_to_cstring(const text *t);
+
 
 /*****************************************************************************/
 
@@ -766,7 +772,7 @@ void
 span_const_to_span(Node *other, Span *span)
 {
   Oid consttype = ((Const *) other)->consttype;
-  meosType type = oid_type(consttype);
+  meosType type = oid_meostype(consttype);
   assert(span_basetype(type) || set_spantype(type) || span_type(type) ||
     spanset_type(type) || talpha_type(type));
   if (span_basetype(type))
@@ -864,7 +870,7 @@ span_sel(PlannerInfo *root, Oid operid, List *args, int varRelid)
   span_const_to_span(other, &span);
   /* Determine whether we can estimate selectivity for the operator */
   meosType ltype, rtype;
-  meosOper oper = oid_oper(operid, &ltype, &rtype);
+  meosOper oper = oid_meosoper(operid, &ltype, &rtype);
   bool value = value_oper_sel(oper, ltype, rtype);
   if (! value)
   {
@@ -963,7 +969,7 @@ _mobdb_span_sel(PG_FUNCTION_ARGS)
   if (! relname)
     ereport(ERROR, (errcode(ERRCODE_UNDEFINED_TABLE),
       errmsg("Oid %u does not refer to a table", relid)));
-  const char *att_name = text2cstring(att_text);
+  const char *att_name = text_to_cstring(att_text);
   AttrNumber att_num;
   /* We know the name? Look up the num */
   if (att_text)
@@ -980,7 +986,7 @@ _mobdb_span_sel(PG_FUNCTION_ARGS)
   bool value = (s->basetype != T_TIMESTAMPTZ);
   /* Determine whether we can estimate selectivity for the operator */
   meosType ltype, rtype;
-  meosOper oper = oid_oper(operid, &ltype, &rtype);
+  meosOper oper = oid_meosoper(operid, &ltype, &rtype);
   bool found = value ?
     value_oper_sel(oper, ltype, rtype) : time_oper_sel(oper, ltype, rtype);
   if (! found)
@@ -1466,7 +1472,7 @@ Span_joinsel(PG_FUNCTION_ARGS)
 
   /* Determine whether we can estimate selectivity for the operator */
   meosType ltype, rtype;
-  meosOper oper = oid_oper(operid, &ltype, &rtype);
+  meosOper oper = oid_meosoper(operid, &ltype, &rtype);
   bool value = value_oper_sel(oper, ltype, rtype);
   if (! value)
   {
@@ -1505,31 +1511,31 @@ _mobdb_span_joinsel(PG_FUNCTION_ARGS)
   if (! table1_name)
     ereport(ERROR, (errcode(ERRCODE_UNDEFINED_TABLE),
       errmsg("Oid %u does not refer to a table", table1_oid)));
-  const char *att1_name = text2cstring(att1_text);
+  const char *att1_name = text_to_cstring(att1_text);
   AttrNumber att1_num;
   /* Get the attribute number */
   att1_num = get_attnum(table1_oid, att1_name);
   if (! att1_num)
     elog(ERROR, "attribute \"%s\" does not exist", att1_name);
   // /* Get the attribute type */
-  // meosType atttype1 = oid_type(get_atttype(table1_oid, att1_num));
+  // meosType atttype1 = oid_meostype(get_atttype(table1_oid, att1_num));
 
   char *table2_name = get_rel_name(table2_oid);
   if (! table2_name)
     ereport(ERROR, (errcode(ERRCODE_UNDEFINED_TABLE),
       errmsg("Oid %u does not refer to a table", table2_oid)));
-  const char *att2_name = text2cstring(att2_text);
+  const char *att2_name = text_to_cstring(att2_text);
   AttrNumber att2_num;
   /* Get the attribute number */
   att2_num = get_attnum(table2_oid, att2_name);
   if (! att2_num)
     elog(ERROR, "attribute \"%s\" does not exist", att2_name);
   // /* Get the attribute type */
-  // meosType atttype2 = oid_type(get_atttype(table1_oid, att1_num));
+  // meosType atttype2 = oid_meostype(get_atttype(table1_oid, att1_num));
 
   /* Determine whether we can estimate selectivity for the operator */
   meosType ltype, rtype;
-  meosOper oper = oid_oper(operid, &ltype, &rtype);
+  meosOper oper = oid_meosoper(operid, &ltype, &rtype);
   bool value = value_oper_sel(oper, ltype, rtype);
   if (! value)
   {

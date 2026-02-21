@@ -103,15 +103,16 @@ lwcircle_make(double x, double y, double radius, int32_t srid)
   assert(radius > 0);
   LWPOINT *points[3];
   /* Shift the X coordinate of the point by +- radius */
-  points[0] = points[2] = lwpoint_make2d(srid, x - radius, y);
+  points[0] = lwpoint_make2d(srid, x - radius, y);
   points[1] = lwpoint_make2d(srid, x + radius, y);
+  points[2] = lwpoint_make2d(srid, x - radius, y);
   /* Construct the circle */
   LWGEOM *ring = lwcircstring_as_lwgeom(
     lwcircstring_from_lwpointarray(srid, 3, points));
   LWCURVEPOLY *result = lwcurvepoly_construct_empty(srid, 0, 0);
   lwcurvepoly_add_ring(result, ring);
   /* Clean up and return */
-  lwpoint_free(points[0]); lwpoint_free(points[1]);
+  lwpoint_free(points[0]); lwpoint_free(points[1]); lwpoint_free(points[2]);
   /* We cannot lwgeom_free(ring); */
   return lwcurvepoly_as_lwgeom(result);
 }
@@ -386,7 +387,7 @@ cbuffer_trav_area(const Cbuffer *cb)
  * @return Number of elements in the output array
  */
 int
-cbufferarr_circles(const TInstant **instants, int count, GSERIALIZED **result)
+cbufferarr_circles(TInstant **instants, int count, GSERIALIZED **result)
 {
   assert(instants); assert(count > 1);
   for (int i = 0; i < count; i++)
@@ -398,7 +399,7 @@ cbufferarr_circles(const TInstant **instants, int count, GSERIALIZED **result)
 }
 
 /**
- * @ingroup meos_internal_cbuffer_spatial_accessor
+ * @ingroup meos_internal_cbuffer_spatial
  * @brief Return the traversed area of a temporal circular buffer instant
  * @param[in] inst Temporal circular buffer
  * @csqlfn #Tcbuffer_traversed_area()
@@ -411,7 +412,7 @@ tcbufferinst_trav_area(const TInstant *inst)
 }
 
 /**
- * @ingroup meos_interal_cbuffer_spatial_accessor
+ * @ingroup meos_interal_cbuffer_spatial
  * @brief Return the traversed area of a temporal circular buffer sequence with
  * discrete or step interpolation
  * @param[in] seq Temporal circular buffer
@@ -425,13 +426,13 @@ tcbufferseq_discstep_trav_area(const TSequence *seq, GSERIALIZED **result)
   assert(seq); assert(seq->count > 1);
   assert(MEOS_FLAGS_GET_INTERP(seq->flags) != LINEAR);
   const TInstant **instants = tsequence_insts_p(seq);
-  int res = cbufferarr_circles(instants, seq->count, result);
+  int res = cbufferarr_circles((TInstant **) instants, seq->count, result);
   pfree(instants);
   return res;
 }
 
 /**
- * @ingroup meos_internal_cbuffer_spatial_accessor
+ * @ingroup meos_internal_cbuffer_spatial
  * @brief Return the traversed area of a temporal circular buffer segment with
  * linear interpolation
  * @param[in] inst1,inst2 Temporal instants
@@ -500,7 +501,7 @@ tcbuffersegm_trav_area(const TInstant *inst1, const TInstant *inst2)
 }
 
 /**
- * @ingroup meos_internal_cbuffer_spatial_accessor
+ * @ingroup meos_internal_cbuffer_spatial
  * @brief Return the traversed area of a temporal circular buffer sequence with
  * linear interpolation (iterator function)
  * @param[in] seq Temporal circular buffer
@@ -532,7 +533,7 @@ tcbufferseq_linear_trav_area(const TSequence *seq, GSERIALIZED **result)
 }
 
 /**
- * @ingroup meos_cbuffer_spatial_accessor
+ * @ingroup meos_internal_cbuffer_spatial
  * @brief Return the traversed area of a temporal circular buffer sequence
  * @param[in] seq Temporal circular buffer
  * @param[in] unary_union True when the traversed area is a single geometry
@@ -578,7 +579,7 @@ tcbufferseq_trav_area(const TSequence *seq, bool unary_union)
 }
 
 /**
- * @ingroup meos_cbuffer_spatial_accessor
+ * @ingroup meos_internal_cbuffer_spatial
  * @brief Return the traversed area of a temporal circular buffer sequence set
  * with step interpolation
  * @param[in] ss Temporal circular buffer
@@ -592,11 +593,11 @@ tcbufferseqset_step_trav_area(const TSequenceSet *ss, GSERIALIZED **result)
   assert(ss); assert(ss->count > 1);
   assert(MEOS_FLAGS_GET_INTERP(ss->flags) == STEP);
   const TInstant **instants = tsequenceset_insts_p(ss);
-  return cbufferarr_circles(instants, ss->count, result);
+  return cbufferarr_circles((TInstant **) instants, ss->count, result);
 }
 
 /**
- * @ingroup meos_internal_cbuffer_spatial_accessor
+ * @ingroup meos_internal_cbuffer_spatial
  * @brief Return the traversed area of a temporal circular buffer sequence set
  * with linear interpolation
  * @param[in] ss Temporal circular buffer
@@ -618,7 +619,7 @@ tcbufferseqset_linear_trav_area(const TSequenceSet *ss, GSERIALIZED **result)
 }
 
 /**
- * @ingroup meos_internal_cbuffer_spatial_accessor
+ * @ingroup meos_internal_cbuffer_spatial
  * @brief Return the traversed area of a temporal circular buffer
  * @param[in] ss Temporal circular buffer
  * @param[in] unary_union True when the traversed area is a single geometry
@@ -664,7 +665,7 @@ tcbufferseqset_trav_area(const TSequenceSet *ss, bool unary_union)
 }
 
 /**
- * @ingroup meos_cbuffer_spatial_accessor
+ * @ingroup meos_cbuffer_spatial
  * @brief Return the traversed area of a temporal circular buffer
  * @param[in] temp Temporal circular buffer
  * @param[in] unary_union True when the traversed area is a single geometry

@@ -47,7 +47,6 @@
 #include <meos.h>
 #include <meos_internal.h>
 #include <meos_internal_geo.h>
-#include "temporal/postgres_types.h"
 #include "temporal/set.h"
 #include "temporal/span.h"
 #include "temporal/spanset.h"
@@ -56,6 +55,10 @@
 #include "temporal/type_util.h"
 #include "geo/tgeo_distance.h"
 #include "geo/tgeo_spatialfuncs.h"
+
+#include <utils/jsonb.h>
+#include <utils/numeric.h>
+#include <pgtypes.h>
 
 /*****************************************************************************
  * Time precision functions for time values
@@ -104,22 +107,22 @@ tstzset_tprecision(const Set *s, const Interval *duration, TimestampTz torigin)
 /**
  * @ingroup meos_setspan_transf
  * @brief Return a timestamptz span with the precision set to a time bin
- * @param[in] s Time value
+ * @param[in] sp Time span
  * @param[in] duration Size of the time bins
  * @param[in] torigin Time origin of the bins
  */
 Span *
-tstzspan_tprecision(const Span *s, const Interval *duration,
+tstzspan_tprecision(const Span *sp, const Interval *duration,
   TimestampTz torigin)
 {
   /* Ensure the validity of the arguments */
-  VALIDATE_TSTZSPAN(s, NULL); VALIDATE_NOT_NULL(duration, NULL);
+  VALIDATE_TSTZSPAN(sp, NULL); VALIDATE_NOT_NULL(duration, NULL);
   if (! ensure_positive_duration(duration))
     return NULL;
 
-  int64 tunits = interval_units(duration);
-  TimestampTz lower = DatumGetTimestampTz(s->lower);
-  TimestampTz upper = DatumGetTimestampTz(s->upper);
+  int64_t tunits = interval_units(duration);
+  TimestampTz lower = DatumGetTimestampTz(sp->lower);
+  TimestampTz upper = DatumGetTimestampTz(sp->upper);
   TimestampTz lower_bin = timestamptz_get_bin(lower, duration, torigin);
   /* We need to add tunits to obtain the end timestamptz of the last bin */
   TimestampTz upper_bin = timestamptz_get_bin(upper, duration, torigin) +
@@ -144,7 +147,7 @@ tstzspanset_tprecision(const SpanSet *ss, const Interval *duration,
   if (! ensure_positive_duration(duration))
     return NULL;
 
-  int64 tunits = interval_units(duration);
+  int64_t tunits = interval_units(duration);
   TimestampTz lower = DatumGetTimestampTz(ss->span.lower);
   TimestampTz upper = DatumGetTimestampTz(ss->span.upper);
   TimestampTz lower_bin = timestamptz_get_bin(lower, duration, torigin);
@@ -152,7 +155,7 @@ tstzspanset_tprecision(const SpanSet *ss, const Interval *duration,
   TimestampTz upper_bin = timestamptz_get_bin(upper, duration, torigin) +
     tunits;
   /* Number of bins */
-  int count = (int) (((int64) upper_bin - (int64) lower_bin) / tunits);
+  int count = (int) (((int64_t) upper_bin - (int64_t) lower_bin) / tunits);
   Span *spans = palloc(sizeof(Span) * count);
   lower = lower_bin;
   upper = lower_bin + tunits;
@@ -160,11 +163,11 @@ tstzspanset_tprecision(const SpanSet *ss, const Interval *duration,
   /* Loop for each bin */
   for (int i = 0; i < count; i++)
   {
-    Span s;
+    Span sp;
     span_set(TimestampTzGetDatum(lower),TimestampTzGetDatum(upper),
-      true, false, T_TIMESTAMPTZ, T_TSTZSPAN, &s);
-    if (overlaps_spanset_span(ss, &s))
-      spans[nspans++] = s;
+      true, false, T_TIMESTAMPTZ, T_TSTZSPAN, &sp);
+    if (overlaps_spanset_span(ss, &sp))
+      spans[nspans++] = sp;
     lower += tunits;
     upper += tunits;
   }
@@ -205,7 +208,7 @@ tsequence_tprecision(const TSequence *seq, const Interval *duration,
     seq->temptype == T_TGEOMPOINT || seq->temptype == T_TGEOGPOINT ||
     seq->temptype == T_TGEOMETRY || seq->temptype == T_TGEOGRAPHY );
 
-  int64 tunits = interval_units(duration);
+  int64_t tunits = interval_units(duration);
   TimestampTz lower = DatumGetTimestampTz(seq->period.lower);
   TimestampTz upper = DatumGetTimestampTz(seq->period.upper);
   TimestampTz lower_bin = timestamptz_get_bin(lower, duration, torigin);
@@ -213,7 +216,7 @@ tsequence_tprecision(const TSequence *seq, const Interval *duration,
   TimestampTz upper_bin = timestamptz_get_bin(upper, duration, torigin) +
     tunits;
   /* Number of bins */
-  int count = (int) (((int64) upper_bin - (int64) lower_bin) / tunits);
+  int count = (int) (((int64_t) upper_bin - (int64_t) lower_bin) / tunits);
   TInstant **ininsts = palloc(sizeof(TInstant *) * seq->count);
   TInstant **outinsts = palloc(sizeof(TInstant *) * count);
   lower = lower_bin;
@@ -267,8 +270,8 @@ tsequence_tprecision(const TSequence *seq, const Interval *duration,
           }
         }
         /* Construct the sequence with the accumulated values */
-        seq1 = tsequence_make((const TInstant **) ininsts, k, true,
-          (k == 1) ? true : false, interp, NORMALIZE);
+        seq1 = tsequence_make(ininsts, k, true, (k == 1) ? true : false,
+          interp, NORMALIZE);
         /* Compute the twAvg/twCentroid for the bin */
         value = twavg ? Float8GetDatum(tnumberseq_twavg(seq1)) :
           PointerGetDatum(tpointseq_twcentroid(seq1));
@@ -319,7 +322,7 @@ tsequence_tprecision(const TSequence *seq, const Interval *duration,
   /* Compute the twAvg/twCentroid of the last bin */
   if (k > 0)
   {
-    seq1 = tsequence_make((const TInstant **) ininsts, k, true,
+    seq1 = tsequence_make(ininsts, k, true,
       (k == 1) ? true : seq->period.upper_inc, interp, NORMALIZE);
     value = twavg ? Float8GetDatum(tnumberseq_twavg(seq1)) :
       PointerGetDatum(tpointseq_twcentroid(seq1));
@@ -352,7 +355,7 @@ tsequenceset_tprecision(const TSequenceSet *ss, const Interval *duration,
   assert(ss->temptype == T_TINT || ss->temptype == T_TFLOAT ||
     ss->temptype == T_TGEOMPOINT || ss->temptype == T_TGEOGPOINT );
 
-  int64 tunits = interval_units(duration);
+  int64_t tunits = interval_units(duration);
   TimestampTz lower = DatumGetTimestampTz(ss->period.lower);
   TimestampTz upper = DatumGetTimestampTz(ss->period.upper);
   TimestampTz lower_bin = timestamptz_get_bin(lower, duration, torigin);
@@ -360,7 +363,7 @@ tsequenceset_tprecision(const TSequenceSet *ss, const Interval *duration,
   TimestampTz upper_bin = timestamptz_get_bin(upper, duration, torigin) +
     tunits;
   /* Number of bins */
-  int count = (int) (((int64) upper_bin - (int64) lower_bin) / tunits);
+  int count = (int) (((int64_t) upper_bin - (int64_t) lower_bin) / tunits);
   TInstant **instants = palloc(sizeof(TInstant *) * count);
   TSequence **sequences = palloc(sizeof(TSequence *) * count);
   lower = lower_bin;
@@ -375,10 +378,10 @@ tsequenceset_tprecision(const TSequenceSet *ss, const Interval *duration,
   /* Loop for each bin */
   for (int i = 0; i < count; i++)
   {
-    Span p;
+    Span sp;
     span_set(TimestampTzGetDatum(lower), TimestampTzGetDatum(upper),
-      true, false, T_TIMESTAMPTZ, T_TSTZSPAN, &p);
-    TSequenceSet *proj = tsequenceset_restrict_tstzspan(ss, &p, REST_AT);
+      true, false, T_TIMESTAMPTZ, T_TSTZSPAN, &sp);
+    TSequenceSet *proj = tsequenceset_restrict_tstzspan(ss, &sp, REST_AT);
     if (proj)
     {
       Datum value = twavg ? Float8GetDatum(tnumber_twavg((Temporal *) proj)) :
@@ -396,8 +399,8 @@ tsequenceset_tprecision(const TSequenceSet *ss, const Interval *duration,
       {
         /* The lower and upper bounds are both true since the tprecision
          * operation amounts to a granularity change */
-        sequences[nseqs++] = tsequence_make((const TInstant **) instants,
-          ninsts, true, true, interp, NORMALIZE);
+        sequences[nseqs++] = tsequence_make(instants, ninsts, true, true,
+          interp, NORMALIZE);
         for (int j = 0; j < ninsts; j++)
           pfree(instants[j]);
         ninsts = 0;
@@ -411,8 +414,8 @@ tsequenceset_tprecision(const TSequenceSet *ss, const Interval *duration,
   {
     /* The lower and upper bounds are both true since the tprecision
      * operation amounts to a granularity change */
-    sequences[nseqs++] = tsequence_make((const TInstant **) instants, ninsts,
-      true, true, interp, NORMALIZE);
+    sequences[nseqs++] = tsequence_make(instants, ninsts, true, true, interp,
+      NORMALIZE);
     for (int j = 0; j < ninsts; j++)
       pfree(instants[j]);
   }
@@ -484,7 +487,7 @@ tinstant_tsample(const TInstant *inst, const Interval *duration,
  */
 int
 tsequence_tsample_iter(const TSequence *seq, TimestampTz lower_bin,
-  TimestampTz upper_bin, int64 tunits, TInstant **result)
+  TimestampTz upper_bin, int64_t tunits, TInstant **result)
 {
   meosType basetype = temptype_basetype(seq->temptype);
   interpType interp = MEOS_FLAGS_GET_INTERP(seq->flags);
@@ -577,7 +580,7 @@ tsequence_tsample(const TSequence *seq, const Interval *duration,
 {
   assert(seq); assert(duration); assert(positive_duration(duration));
 
-  int64 tunits = interval_units(duration);
+  int64_t tunits = interval_units(duration);
   TimestampTz lower = DatumGetTimestampTz(seq->period.lower);
   TimestampTz upper = DatumGetTimestampTz(seq->period.upper);
   TimestampTz lower_bin = timestamptz_get_bin(lower, duration, torigin);
@@ -585,7 +588,7 @@ tsequence_tsample(const TSequence *seq, const Interval *duration,
   TimestampTz upper_bin = timestamptz_get_bin(upper, duration, torigin) +
     tunits;
   /* Number of bins */
-  int count = (int) (((int64) upper_bin - (int64) lower_bin) / tunits) + 1;
+  int count = (int) (((int64_t) upper_bin - (int64_t) lower_bin) / tunits) + 1;
   TInstant **instants = palloc(sizeof(TInstant *) * count);
   int ninsts = tsequence_tsample_iter(seq, lower_bin, upper_bin, tunits,
     &instants[0]);
@@ -604,7 +607,7 @@ tsequenceset_disc_tsample(const TSequenceSet *ss, const Interval *duration,
 {
   assert(ss); assert(duration); assert(positive_duration(duration));
 
-  int64 tunits = interval_units(duration);
+  int64_t tunits = interval_units(duration);
   TimestampTz lower = tsequenceset_start_timestamptz(ss);
   TimestampTz upper = tsequenceset_end_timestamptz(ss);
   TimestampTz lower_bin = timestamptz_get_bin(lower, duration, torigin);
@@ -612,7 +615,7 @@ tsequenceset_disc_tsample(const TSequenceSet *ss, const Interval *duration,
   TimestampTz upper_bin = timestamptz_get_bin(upper, duration, torigin) +
     tunits;
   /* Number of bins */
-  int count = (int) (((int64) upper_bin - (int64) lower_bin) / tunits) + 1;
+  int count = (int) (((int64_t) upper_bin - (int64_t) lower_bin) / tunits) + 1;
   TInstant **instants = palloc(sizeof(TInstant *) * count);
   /* Loop for each segment */
   int ninsts = 0;
@@ -738,8 +741,8 @@ tinstant_distance(const TInstant *inst1, const TInstant *inst2,
  * @note Only two rows of the full matrix are used
  */
 static double
-tinstarr_similarity1(double *dist, const TInstant **instants1, int count1,
-  const TInstant **instants2, int count2, SimFunc simfunc)
+tinstarr_similarity1(double *dist, TInstant **instants1, int count1,
+  TInstant **instants2, int count2, SimFunc simfunc)
 {
   datum_func2 func = pt_distance_fn(instants1[0]->flags);
   for (int i = 0; i < count1; i++)
@@ -804,8 +807,8 @@ tinstarr_similarity1(double *dist, const TInstant **instants1, int count1,
  * @note Only two rows of the full matrix are used
  */
 static double
-tinstarr_similarity(const TInstant **instants1, int count1,
-  const TInstant **instants2, int count2, SimFunc simfunc)
+tinstarr_similarity(TInstant **instants1, int count1, TInstant **instants2,
+  int count2, SimFunc simfunc)
 {
   /* Allocate memory for two rows of the distance matrix */
   double *dist = palloc(sizeof(double) * 2 * count2);
@@ -833,11 +836,13 @@ temporal_similarity(const Temporal *temp1, const Temporal *temp2,
   assert(temp1->temptype == temp2->temptype);
   double result;
   int count1, count2;
-  const TInstant **instants1 = temporal_instants_p(temp1, &count1);
-  const TInstant **instants2 = temporal_instants_p(temp2, &count2);
+  const TInstant **instants1 = temporal_insts_p(temp1, &count1);
+  const TInstant **instants2 = temporal_insts_p(temp2, &count2);
   result = count1 > count2 ?
-    tinstarr_similarity(instants1, count1, instants2, count2, simfunc) :
-    tinstarr_similarity(instants2, count2, instants1, count1, simfunc);
+    tinstarr_similarity((TInstant **) instants1, count1,
+      (TInstant **) instants2, count2, simfunc) :
+    tinstarr_similarity((TInstant **) instants2, count2,
+      (TInstant **) instants1, count1, simfunc);
   /* Free memory */
   pfree(instants1); pfree(instants2);
   return result;
@@ -992,8 +997,8 @@ tinstarr_similarity_path(double *dist, int count1, int count2, int *count)
  * @param[out] dist Matrix keeping the distances
  */
 static void
-tinstarr_similarity_matrix1(const TInstant **instants1, int count1,
-  const TInstant **instants2, int count2, SimFunc simfunc, double *dist)
+tinstarr_similarity_matrix1(TInstant **instants1, int count1,
+  TInstant **instants2, int count2, SimFunc simfunc, double *dist)
 {
   datum_func2 func = pt_distance_fn(instants1[0]->flags);
   for (int i = 0; i < count1; i++)
@@ -1057,8 +1062,8 @@ tinstarr_similarity_matrix1(const TInstant **instants1, int count1,
  * @param[out] count Number of elements in the resulting array
  */
 static Match *
-tinstarr_similarity_matrix(const TInstant **instants1, int count1,
-  const TInstant **instants2, int count2, SimFunc simfunc, int *count)
+tinstarr_similarity_matrix(TInstant **instants1, int count1,
+  TInstant **instants2, int count2, SimFunc simfunc, int *count)
 {
   /* Allocate memory for dist */
   double *dist = palloc(sizeof(double) * count1 * count2);
@@ -1089,13 +1094,13 @@ temporal_similarity_path(const Temporal *temp1, const Temporal *temp2,
   assert(temp1); assert(temp2); assert(count);
   assert(temp1->temptype == temp2->temptype);
   int count1, count2;
-  const TInstant **instants1 = temporal_instants_p(temp1, &count1);
-  const TInstant **instants2 = temporal_instants_p(temp2, &count2);
+  const TInstant **instants1 = temporal_insts_p(temp1, &count1);
+  const TInstant **instants2 = temporal_insts_p(temp2, &count2);
   Match *result = count1 > count2 ?
-    tinstarr_similarity_matrix(instants1, count1, instants2, count2,
-      simfunc, count) :
-    tinstarr_similarity_matrix(instants2, count2, instants1, count1,
-      simfunc, count);
+    tinstarr_similarity_matrix((TInstant **) instants1, count1,
+      (TInstant **) instants2, count2, simfunc, count) :
+    tinstarr_similarity_matrix((TInstant **) instants2, count2,
+      (TInstant **) instants1, count1, simfunc, count);
   /* Free memory */
   pfree(instants1); pfree(instants2);
   return result;
@@ -1146,8 +1151,8 @@ temporal_dyntimewarp_path(const Temporal *temp1, const Temporal *temp2,
  * @param[in] count1,count2 Number of instants in the arrays
  */
 static double
-tinstarr_hausdorff_distance(const TInstant **instants1, int count1,
-  const TInstant **instants2, int count2)
+tinstarr_hausdorff_distance(TInstant **instants1, int count1,
+  TInstant **instants2, int count2)
 {
   datum_func2 func = pt_distance_fn(instants1[0]->flags);
   const TInstant *inst1, *inst2;
@@ -1204,9 +1209,10 @@ temporal_hausdorff_distance(const Temporal *temp1, const Temporal *temp2)
 
   double result;
   int count1, count2;
-  const TInstant **instants1 = temporal_instants_p(temp1, &count1);
-  const TInstant **instants2 = temporal_instants_p(temp2, &count2);
-  result = tinstarr_hausdorff_distance(instants1, count1, instants2, count2);
+  const TInstant **instants1 = temporal_insts_p(temp1, &count1);
+  const TInstant **instants2 = temporal_insts_p(temp2, &count2);
+  result = tinstarr_hausdorff_distance((TInstant **) instants1, count1,
+    (TInstant **) instants2, count2);
   /* Free memory */
   pfree(instants1); pfree(instants2);
   return result;
@@ -1230,8 +1236,8 @@ tsequence_simplify_min_dist(const TSequence *seq, double dist)
   datum_func2 func = pt_distance_fn(seq->flags);
   const TInstant *inst1 = TSEQUENCE_INST_N(seq, 0);
   /* Add first instant to the output sequence */
-  const TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
-  instants[0] = inst1;
+  TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
+  instants[0] = (TInstant *) inst1;
   int ninsts = 1;
   bool last = false;
   /* Loop for every instant */
@@ -1242,14 +1248,14 @@ tsequence_simplify_min_dist(const TSequence *seq, double dist)
     if (d > dist)
     {
       /* Add instant to output sequence */
-      instants[ninsts++] = inst2;
+      instants[ninsts++] = (TInstant *) inst2;
       inst1 = inst2;
       if (i == seq->count - 1)
         last = true;
     }
   }
   if (seq->count > 1 && ! last)
-    instants[ninsts++] = TSEQUENCE_INST_N(seq, seq->count - 1);
+    instants[ninsts++] = (TInstant *) TSEQUENCE_INST_N(seq, seq->count - 1);
   TSequence *result = tsequence_make(instants, ninsts,
     (ninsts == 1) ? true : seq->period.lower_inc,
     (ninsts == 1) ? true : seq->period.upper_inc, LINEAR, NORMALIZE);
@@ -1326,8 +1332,8 @@ tsequence_simplify_min_tdelta(const TSequence *seq, const Interval *mint)
 {
   const TInstant *inst1 = TSEQUENCE_INST_N(seq, 0);
   /* Add first instant to the output sequence */
-  const TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
-  instants[0] = inst1;
+  TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
+  instants[0] = (TInstant *) inst1;
   int ninsts = 1;
   bool last = false;
   /* Loop for every instant */
@@ -1335,10 +1341,10 @@ tsequence_simplify_min_tdelta(const TSequence *seq, const Interval *mint)
   {
     const TInstant *inst2 = TSEQUENCE_INST_N(seq, i);
     Interval *duration = minus_timestamptz_timestamptz(inst2->t, inst1->t);
-    if (pg_interval_cmp(duration, mint) > 0)
+    if (pg_interval_cmp(duration, (Interval *) mint) > 0)
     {
       /* Add instant to output sequence */
-      instants[ninsts++] = inst2;
+      instants[ninsts++] = (TInstant *) inst2;
       inst1 = inst2;
       if (i == seq->count - 1)
         last = true;
@@ -1346,7 +1352,7 @@ tsequence_simplify_min_tdelta(const TSequence *seq, const Interval *mint)
     pfree(duration);
   }
   if (seq->count > 1 && ! last)
-    instants[ninsts++] = TSEQUENCE_INST_N(seq, seq->count - 1);
+    instants[ninsts++] = (TInstant *) TSEQUENCE_INST_N(seq, seq->count - 1);
   TSequence *result = tsequence_make(instants, ninsts,
     (ninsts == 1) ? true : seq->period.lower_inc,
     (ninsts == 1) ? true : seq->period.upper_inc, LINEAR, NORMALIZE);
@@ -1482,71 +1488,71 @@ dist3d_pt_pt(POINT3DZ *p1, POINT3DZ *p2)
 
 /**
  * @brief Return the 2D distance between the point the segment
- * @param[in] p Point
+ * @param[in] pt Point
  * @param[in] A,B Points defining the segment
  * @see http://geomalgorithms.com/a02-_lines.html
  * @note Derived from the PostGIS function lw_dist2d_pt_seg in
  * file measures.c
  */
 static double
-dist2d_pt_seg(POINT2D *p, POINT2D *A, POINT2D *B)
+dist2d_pt_seg(POINT2D *pt, POINT2D *A, POINT2D *B)
 {
   POINT2D c;
   double r;
   /* If start==end, then use pt distance */
   if (A->x == B->x && A->y == B->y)
-    return dist2d_pt_pt(p, A);
+    return dist2d_pt_pt(pt, A);
 
-  r = ( (p->x-A->x) * (B->x-A->x) + (p->y-A->y) * (B->y-A->y) ) /
+  r = ( (pt->x-A->x) * (B->x-A->x) + (pt->y-A->y) * (B->y-A->y) ) /
       ( (B->x-A->x) * (B->x-A->x) + (B->y-A->y) * (B->y-A->y) );
 
-  if (r < 0) /* If the first vertex A is closest to the point p */
-    return dist2d_pt_pt(p, A);
-  if (r > 1)  /* If the second vertex B is closest to the point p */
-    return dist2d_pt_pt(p, B);
+  if (r < 0) /* If the first vertex A is closest to the point pt */
+    return dist2d_pt_pt(pt, A);
+  if (r > 1)  /* If the second vertex B is closest to the point pt */
+    return dist2d_pt_pt(pt, B);
 
-  /* else if the point p is closer to some point between a and b
+  /* else if the point pt is closer to some point between a and b
   then we find that point and send it to dist2d_pt_pt */
   c.x = A->x + r * (B->x - A->x);
   c.y = A->y + r * (B->y - A->y);
 
-  return dist2d_pt_pt(p, &c);
+  return dist2d_pt_pt(pt, &c);
 }
 
 /**
  * @brief Return the 3D distance between the point the segment
- * @param[in] p Point
+ * @param[in] pt Point
  * @param[in] A,B Points defining the segment
  * @note Derived from the PostGIS function lw_dist3d_pt_seg in file
  * measures3d.c
  * @see http://geomalgorithms.com/a02-_lines.html
  */
 static double
-dist3d_pt_seg(POINT3DZ *p, POINT3DZ *A, POINT3DZ *B)
+dist3d_pt_seg(POINT3DZ *pt, POINT3DZ *A, POINT3DZ *B)
 {
   POINT3DZ c;
   double r;
   /* If start==end, then use pt distance */
   if (FP_EQUALS(A->x, B->x) && FP_EQUALS(A->y, B->y) && FP_EQUALS(A->z, B->z))
-    return dist3d_pt_pt(p, A);
+    return dist3d_pt_pt(pt, A);
 
-  r = ( (p->x-A->x) * (B->x-A->x) + (p->y-A->y) * (B->y-A->y) +
-        (p->z-A->z) * (B->z-A->z) ) /
+  r = ( (pt->x-A->x) * (B->x-A->x) + (pt->y-A->y) * (B->y-A->y) +
+        (pt->z-A->z) * (B->z-A->z) ) /
       ( (B->x-A->x) * (B->x-A->x) + (B->y-A->y) * (B->y-A->y) +
         (B->z-A->z) * (B->z-A->z) );
 
-  if (r < 0) /* If the first vertex A is closest to the point p */
-    return dist3d_pt_pt(p, A);
-  if (r > 1) /* If the second vertex B is closest to the point p */
-    return dist3d_pt_pt(p, B);
+  if (r < 0) /* If the first vertex A is closest to the point pt */
+    return dist3d_pt_pt(pt, A);
+  if (r > 1) /* If the second vertex B is closest to the point pt */
+    return dist3d_pt_pt(pt, B);
 
-  /* If the point p is closer to some point between a and b, then we find that
+  /* If the point pt is closer to some point between a and b, then we find that
      point and send it to dist3d_pt_pt */
   c.x = A->x + r * (B->x - A->x);
   c.y = A->y + r * (B->y - A->y);
   c.z = A->z + r * (B->z - A->z);
 
-  return dist3d_pt_pt(p, &c);
+  return dist3d_pt_pt(pt, &c);
 }
 
 /**
@@ -1651,7 +1657,7 @@ TSequence *
 tsequence_simplify_max_dist(const TSequence *seq, double dist, bool syncdist,
   uint32_t minpts)
 {
-  const TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
+  TInstant **instants = palloc(sizeof(TInstant *) * seq->count);
   const TInstant *prev = NULL;
   const TInstant *cur = NULL;
   uint32_t start = 0,   /* Lower index for finding the split */
@@ -1663,7 +1669,7 @@ tsequence_simplify_max_dist(const TSequence *seq, double dist, bool syncdist,
     cur = TSEQUENCE_INST_N(seq, i);
     if (prev == NULL)
     {
-      instants[ninsts++] = cur;
+      instants[ninsts++] = (TInstant *) cur;
       prev = cur;
       continue;
     }
@@ -1676,13 +1682,13 @@ tsequence_simplify_max_dist(const TSequence *seq, double dist, bool syncdist,
     if (dosplit)
     {
       prev = cur;
-      instants[ninsts++] = TSEQUENCE_INST_N(seq, split);
+      instants[ninsts++] = (TInstant *) TSEQUENCE_INST_N(seq, split);
       start = split;
       continue;
     }
   }
   if (ninsts > 0 && instants[ninsts - 1] != cur)
-    instants[ninsts++] = cur;
+    instants[ninsts++] = (TInstant *) cur;
   TSequence *result = tsequence_make(instants, ninsts,
     (ninsts == 1) ? true : seq->period.lower_inc,
     (ninsts == 1) ? true : seq->period.upper_inc, LINEAR, NORMALIZE);
@@ -1826,9 +1832,9 @@ tsequence_simplify_dp(const TSequence *seq, double dist, bool syncdist,
   /* Order the list of points kept */
   qsort(outlist, outn, sizeof(int), int_cmp);
   /* Create a new temporal sequence */
-  const TInstant **instants = palloc(sizeof(TInstant *) * outn);
+  TInstant **instants = palloc(sizeof(TInstant *) * outn);
   for (i = 0; i < outn; i++)
-    instants[i] = TSEQUENCE_INST_N(seq, outlist[i]);
+    instants[i] = (TInstant *) TSEQUENCE_INST_N(seq, outlist[i]);
   TSequence *result = tsequence_make(instants, outn, seq->period.lower_inc,
     seq->period.upper_inc, LINEAR, NORMALIZE);
   pfree(instants);

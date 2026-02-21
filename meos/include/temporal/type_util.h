@@ -66,8 +66,9 @@ extern char *basetype_out(Datum value, meosType type, int maxdd);
 /* Array functions */
 
 extern void pfree_array(void **array, int count);
-extern char *stringarr_to_string(char **strings, int count, size_t outlen,
-  char *prefix, char open, char close, bool quotes, bool spaces);
+extern char *string_escape(const char *str, int quotes);
+extern char *stringarr_to_string(char **strings, int count, char *prefix,
+  char open, char close, int quotes, bool spaces);
 
 /* Sort functions */
 
@@ -82,7 +83,7 @@ extern void tseqarr_sort(TSequence **sequences, int count);
 extern int datumarr_remove_duplicates(Datum *values, int count,
   meosType basetype);
 extern int tstzarr_remove_duplicates(TimestampTz *values, int count);
-extern int tinstarr_remove_duplicates(const TInstant **instants, int count);
+extern int tinstarr_remove_duplicates(TInstant **instants, int count);
 
 /* Text functions */
 

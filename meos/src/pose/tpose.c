@@ -331,7 +331,7 @@ tposeseq_make(const TSequence *seq1, const TSequence *seq2)
     inst2 = TSEQUENCE_INST_N(seq2, i);
     instants[i] = tposeinst_make(inst1, inst2);
   }
-  TSequence *result = tsequence_make((const TInstant **) instants, seq1->count,
+  TSequence *result = tsequence_make(instants, seq1->count,
     seq1->period.lower_inc, seq1->period.upper_inc, interp, NORMALIZE);
   return result;
 }
@@ -369,8 +369,7 @@ tposeseqset_make(const TSequenceSet *ss1, const TSequenceSet *ss2)
     seq2 = TSEQUENCESET_SEQ_N(ss2, i);
     sequences[i] = tposeseq_make(seq1, seq2);
   }
-  TSequenceSet *result = tsequenceset_make((const TSequence **) sequences,
-    ss1->count, NORMALIZE);
+  TSequenceSet *result = tsequenceset_make(sequences, ss1->count, NORMALIZE);
   return result;
 }
 
@@ -425,7 +424,7 @@ tpose_make(const Temporal *tpoint, const Temporal *tradius)
 
 /**
  * @ingroup meos_pose_conversion
- * @brief Return a geometry point from a temporal pose
+ * @brief Return a temporal point from a temporal pose
  * @param[in] temp Temporal pose
  */
 Temporal *
@@ -437,9 +436,9 @@ tpose_to_tpoint(const Temporal *temp)
   LiftedFunctionInfo lfinfo;
   memset(&lfinfo, 0, sizeof(LiftedFunctionInfo));
   lfinfo.func = (varfunc) &datum_pose_point;
-  lfinfo.numparam = 0;
   lfinfo.argtype[0] = temptype_basetype(temp->temptype);
   lfinfo.restype = T_TGEOMPOINT;
+  lfinfo.reslinear = MEOS_FLAGS_LINEAR_INTERP(temp->flags);
   Temporal *result = tfunc_temporal(temp, &lfinfo);
   return result;
 }
@@ -450,7 +449,7 @@ tpose_to_tpoint(const Temporal *temp)
 
 /**
  * @ingroup meos_pose_accessor
- * @brief Return a the rotation of a temporal pose as a temporal float
+ * @brief Return the rotation of a temporal pose as a temporal float
  * @param[in] temp Temporal pose
  */
 Temporal *
@@ -464,7 +463,6 @@ tpose_rotation(const Temporal *temp)
   LiftedFunctionInfo lfinfo;
   memset(&lfinfo, 0, sizeof(LiftedFunctionInfo));
   lfinfo.func = (varfunc) &datum_pose_rotation;
-  lfinfo.numparam = 0;
   lfinfo.argtype[0] = T_TPOSE;
   lfinfo.restype = T_TFLOAT;
   Temporal *result = tfunc_temporal(temp, &lfinfo);
@@ -526,7 +524,7 @@ tpose_value_n(const Temporal *temp, int n, Pose **result)
 
 /**
  * @ingroup meos_pose_accessor
- * @brief Return the array of copies of base values of a temporal pose
+ * @brief Return an array of copies of the base values of a temporal pose
  * @param[in] temp Temporal value
  * @param[out] count Number of values in the output array
  * @csqlfn #Temporal_valueset()
@@ -581,7 +579,7 @@ tposeseq_points(const TSequence *seq)
 Set *
 tposeseqset_points(const TSequenceSet *ss)
 {
-  Datum *values = palloc(sizeof(int64) * ss->totalcount);
+  Datum *values = palloc(sizeof(int64_t) * ss->totalcount);
   int nvalues = 0;
   for (int i = 0; i < ss->count; i++)
   {
@@ -600,7 +598,7 @@ tposeseqset_points(const TSequenceSet *ss)
 
 /**
  * @ingroup meos_pose_accessor
- * @brief Return the array of points of a temporal pose
+ * @brief Return the set of points of a temporal pose
  * @csqlfn #Tpose_points()
  */
 Set *

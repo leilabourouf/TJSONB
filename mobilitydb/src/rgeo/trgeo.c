@@ -39,6 +39,7 @@
 #include <stdio.h>
 /* PostgreSQL */
 #include <postgres.h>
+#include "pgtypes.h"
 #include "utils/array.h"
 #include "utils/timestamp.h"
 /* MEOS */
@@ -97,7 +98,7 @@ Trgeometry_in(PG_FUNCTION_ARGS)
 {
   const char *input = PG_GETARG_CSTRING(0);
   Oid temptypid = PG_GETARG_OID(1);
-  Temporal *result = trgeo_parse(&input, oid_type(temptypid));
+  Temporal *result = trgeo_parse(&input, oid_meostype(temptypid));
   PG_RETURN_POINTER(result);
 }
 
@@ -162,7 +163,7 @@ Datum
 Trgeometry_typmod_in(PG_FUNCTION_ARGS)
 {
   ArrayType *array = (ArrayType *) DatumGetPointer(PG_GETARG_DATUM(0));
-  uint32 typmod = tspatial_typmod_in(array, true, false);
+  uint32_t typmod = tspatial_typmod_in(array, true, false);
   PG_RETURN_INT32(typmod);
 }
 
@@ -185,10 +186,10 @@ Trgeometry_from_ewkt(PG_FUNCTION_ARGS)
 {
   text *wkt_text = PG_GETARG_TEXT_P(0);
   Oid temptypid = get_fn_expr_rettype(fcinfo->flinfo);
-  char *wkt = text2cstring(wkt_text);
+  char *wkt = pg_text_to_cstring(wkt_text);
   /* Copy the pointer since it will be advanced during parsing */
   const char *wkt_ptr = wkt;
-  Temporal *result = trgeo_parse(&wkt_ptr, oid_type(temptypid));
+  Temporal *result = trgeo_parse(&wkt_ptr, oid_meostype(temptypid));
   pfree(wkt);
   PG_FREE_IF_COPY(wkt_text, 0);
   PG_RETURN_POINTER(result);
@@ -210,7 +211,7 @@ Trgeometry_as_text_common(FunctionCallInfo fcinfo, bool extended)
   if (PG_NARGS() > 1 && ! PG_ARGISNULL(1))
     dbl_dig_for_wkt = PG_GETARG_INT32(1);
   char *str = trgeo_wkt_out(temp, dbl_dig_for_wkt, extended);
-  text *result = cstring2text(str);
+  text *result = pg_cstring_to_text(str);
   pfree(str);
   PG_FREE_IF_COPY(temp, 0);
   PG_RETURN_TEXT_P(result);
@@ -282,12 +283,12 @@ Datum
 Trgeometry_seq_constructor(PG_FUNCTION_ARGS)
 {
   ArrayType *array = PG_GETARG_ARRAYTYPE_P(0);
-  meosType temptype = oid_type(get_fn_expr_rettype(fcinfo->flinfo));
+  meosType temptype = oid_meostype(get_fn_expr_rettype(fcinfo->flinfo));
   interpType interp = temptype_continuous(temptype) ? LINEAR : STEP;
   if (PG_NARGS() > 1 && ! PG_ARGISNULL(1))
   {
     text *interp_txt = PG_GETARG_TEXT_P(1);
-    char *interp_str = text2cstring(interp_txt);
+    char *interp_str = pg_text_to_cstring(interp_txt);
     interp = interptype_from_string(interp_str);
     pfree(interp_str);
   }
@@ -300,7 +301,7 @@ Trgeometry_seq_constructor(PG_FUNCTION_ARGS)
   int count;
   TInstant **instants = (TInstant **) temparr_extract(array, &count);
   Temporal *result = (Temporal *) trgeoseq_make(trgeoinst_geom_p(instants[0]),
-    (const TInstant **) instants, count, lower_inc, upper_inc, interp,
+    instants, count, lower_inc, upper_inc, interp,
     NORMALIZE);
   pfree(instants);
   PG_FREE_IF_COPY(array, 0);
@@ -323,8 +324,7 @@ Trgeometry_seqset_constructor(PG_FUNCTION_ARGS)
   int count;
   TSequence **sequences = (TSequence **) temparr_extract(array, &count);
   Temporal *result = (Temporal *) trgeoseqset_make(
-    trgeoseq_geom_p(sequences[0]), (const TSequence **) sequences, count,
-    NORMALIZE);
+    trgeoseq_geom_p(sequences[0]), sequences, count, NORMALIZE);
   pfree(sequences);
   PG_FREE_IF_COPY(array, 0);
   PG_RETURN_POINTER(result);
@@ -349,7 +349,7 @@ Trgeometry_seqset_constructor_gaps(PG_FUNCTION_ARGS)
   ensure_not_empty_array(array);
   double maxdist = -1.0;
   Interval *maxt = NULL;
-  meosType temptype = oid_type(get_fn_expr_rettype(fcinfo->flinfo));
+  meosType temptype = oid_meostype(get_fn_expr_rettype(fcinfo->flinfo));
   interpType interp = temptype_continuous(temptype) ? LINEAR : STEP;
   if (PG_NARGS() > 1 && ! PG_ARGISNULL(1))
     maxt = PG_GETARG_INTERVAL_P(1);
@@ -358,7 +358,7 @@ Trgeometry_seqset_constructor_gaps(PG_FUNCTION_ARGS)
   if (PG_NARGS() > 3 && ! PG_ARGISNULL(3))
   {
     text *interp_txt = PG_GETARG_TEXT_P(3);
-    char *interp_str = text2cstring(interp_txt);
+    char *interp_str = pg_text_to_cstring(interp_txt);
     interp = interptype_from_string(interp_str);
     pfree(interp_str);
   }
@@ -369,7 +369,7 @@ Trgeometry_seqset_constructor_gaps(PG_FUNCTION_ARGS)
   int count;
   TInstant **instants = (TInstant **) temparr_extract(array, &count);
   TSequenceSet *result = trgeoseqset_make_gaps(trgeoinst_geom_p(instants[0]),
-    (const TInstant **) instants, count, interp, maxt, maxdist);
+    instants, count, interp, maxt, maxdist);
   pfree(instants);
   PG_FREE_IF_COPY(array, 0);
   PG_RETURN_POINTER(result);
@@ -566,7 +566,7 @@ Trgeometry_to_tsequence(PG_FUNCTION_ARGS)
   if (PG_NARGS() > 1 && ! PG_ARGISNULL(1))
   {
     text *interp_txt = PG_GETARG_TEXT_P(1);
-    interp_str = text2cstring(interp_txt);
+    interp_str = pg_text_to_cstring(interp_txt);
   }
   TSequence *result = trgeo_to_tsequence(temp, interp_str);
   PG_FREE_IF_COPY(temp, 0);
@@ -593,7 +593,7 @@ Trgeometry_to_tsequenceset(PG_FUNCTION_ARGS)
   if (PG_NARGS() > 1 && ! PG_ARGISNULL(1))
   {
     text *interp_txt = PG_GETARG_TEXT_P(1);
-    interp_str = text2cstring(interp_txt);
+    interp_str = pg_text_to_cstring(interp_txt);
   }
   TSequenceSet *result = trgeo_to_tsequenceset(temp, interp_str);
   PG_FREE_IF_COPY(temp, 0);

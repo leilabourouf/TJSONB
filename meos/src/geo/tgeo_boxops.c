@@ -178,7 +178,7 @@ tspatialseqset_set_stbox(const TSequenceSet *ss, STBox *box)
  * @note Temporal instant values do not have a precomputed bounding box
  */
 void
-tgeoinstarr_set_stbox(const TInstant **instants, int count, STBox *box)
+tgeoinstarr_set_stbox(TInstant **instants, int count, STBox *box)
 {
   assert(instants); assert(box);
   /* Initialize the bounding box with the first instant */
@@ -219,8 +219,8 @@ tgeoinstarr_set_stbox(const TInstant **instants, int count, STBox *box)
  * @param[out] box Bounding box
  */
 void
-tspatialinstarr_set_stbox(const TInstant **instants, int count,
-  bool lower_inc, bool upper_inc, interpType interp, void *box)
+tspatialinstarr_set_stbox(TInstant **instants, int count, bool lower_inc,
+  bool upper_inc, interpType interp, void *box)
 {
   meosType temptype = instants[0]->temptype;
   assert(tspatial_type(temptype));
@@ -317,7 +317,7 @@ tspatialseq_expand_stbox(TSequence *seq, const TInstant *inst)
  * @param[out] box Spatiotemporal box
  */
 void
-tspatialseqarr_set_stbox(const TSequence **sequences, int count, STBox *box)
+tspatialseqarr_set_stbox(TSequence **sequences, int count, STBox *box)
 {
   assert(sequences); assert(box);
   memcpy(box, TSEQUENCE_BBOX_PTR(sequences[0]), sizeof(STBox));
@@ -438,7 +438,7 @@ tgeoseq_cont_stboxes_iter(const TSequence *seq, STBox *result)
 
 /**
  * @ingroup meos_internal_geo_bbox
- * @brief Return an array of spatiotemporal boxes from the instants or segments
+ * @brief Return an array of spatiotemporal boxes from the instants or the segments
  * of a temporal geo sequence, where the choice between instants or segments
  * depends, respectively, on whether the interpolation is discrete or
  * continuous
@@ -489,9 +489,9 @@ tgeoseqset_stboxes(const TSequenceSet *ss, int *count)
 
 /**
  * @ingroup meos_geo_bbox_split
- * @brief Return an array of spatiotemporal boxes from the instants or segments
- * of a temporal geo, where the choice between instants or segments depends,
- * respectively, on whether the interpolation is discrete or continuous
+ * @brief Return an array of spatiotemporal boxes from the instants or the
+ * segments of a temporal geo, where the choice between instants or segments
+ * depends, respectively, on whether the interpolation is discrete or continuous
  * @param[in] temp Temporal geo
  * @param[out] count Number of values of the output array
  * @return On error return @p NULL

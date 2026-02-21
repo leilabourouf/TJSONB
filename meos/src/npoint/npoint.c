@@ -40,11 +40,16 @@
 #include <limits.h>
 /* PostgreSQL */
 #include <postgres.h>
+#include <common/hashfn.h>
+#include "utils/numeric.h"
+#include <utils/date.h>
+#include <utils/timestamp.h>
 #if ! MEOS
   #include <libpq/pqformat.h>
   #include <executor/spi.h>
   #include <utils/memutils.h>
 #endif /* ! MEOS */
+#include "port/pg_bitutils.h"
 /* PostGIS */
 #include <liblwgeom.h>
 /* MEOS */
@@ -53,7 +58,7 @@
 #include <meos_npoint.h>
 #include <meos_internal.h>
 #include <meos_internal_geo.h>
-#include "temporal/postgres_types.h"
+#include <pgtypes.h>
 #include "temporal/span.h"
 #include "temporal/tsequence.h"
 #include "temporal/type_inout.h"
@@ -153,7 +158,7 @@ npointsegm_locate(const Npoint *start, const Npoint *end, const Npoint *value)
  * @brief Ensure that a route exists in the ways table
  */
 bool
-ensure_route_exists(int64 rid)
+ensure_route_exists(int64_t rid)
 {
   if (! route_exists(rid))
   {
@@ -269,15 +274,15 @@ npoint_parse(const char **str, bool end)
   /* Parse rid */
   p_whitespace(str);
   Datum d;
-  if (! basetype_parse(str, T_INT8, ',', &d))
+  if (! basetype_parse(str, T_INT8, ",", &d))
     return NULL;
-  int64 rid = DatumGetInt64(d);
+  int64_t rid = DatumGetInt64(d);
 
   p_comma(str);
 
   /* Parse pos */
   p_whitespace(str);
-  if (! basetype_parse(str, T_FLOAT8, ')', &d))
+  if (! basetype_parse(str, T_FLOAT8, ")", &d))
     return NULL;
   double pos = DatumGetFloat8(d);
   if (pos < 0 || pos > 1)
@@ -327,7 +332,7 @@ npoint_out(const Npoint *np, int maxdd)
     return NULL;
 
   char *result = palloc(NPOINT_MAXLEN);
-  char *rid = int8_out(np->rid);
+  char *rid = int64_out(np->rid);
   char *pos = float8_out(np->pos, maxdd);
   snprintf(result, NPOINT_MAXLEN, "NPoint(%s,%s)", rid, pos);
   pfree(rid); pfree(pos);
@@ -362,15 +367,15 @@ nsegment_parse(const char **str)
   /* Parse rid */
   p_whitespace(str);
   Datum d;
-  if (! basetype_parse(str, T_INT8, ',', &d))
+  if (! basetype_parse(str, T_INT8, ",", &d))
     return NULL;
-  int64 rid = DatumGetInt64(d);
+  int64_t rid = DatumGetInt64(d);
 
   p_comma(str);
 
   /* Parse pos1 */
   p_whitespace(str);
-  if (! basetype_parse(str, T_FLOAT8, ',', &d))
+  if (! basetype_parse(str, T_FLOAT8, ",", &d))
     return NULL;
   double pos1 = DatumGetFloat8(d);
   if (pos1 < 0 || pos1 > 1)
@@ -383,7 +388,7 @@ nsegment_parse(const char **str)
 
   /* Parse pos2 */
   p_whitespace(str);
-  if (! basetype_parse(str, T_FLOAT8, ')', &d))
+  if (! basetype_parse(str, T_FLOAT8, ")", &d))
     return NULL;
   double pos2 = DatumGetFloat8(d);
   if (pos2 < 0 || pos2 > 1)
@@ -431,7 +436,7 @@ nsegment_out(const Nsegment *ns, int maxdd)
     return NULL;
 
   char *result = palloc(NSEGMENT_MAXLEN);
-  char *rid = int8_out(ns->rid);
+  char *rid = int64_out(ns->rid);
   char *pos1 = float8_out(ns->pos1, maxdd);
   char *pos2 = float8_out(ns->pos2, maxdd);
   snprintf(result, NSEGMENT_MAXLEN, "NSegment(%s,%s,%s)", rid, pos1, pos2);
@@ -451,7 +456,7 @@ char *
 npoint_wkt_out(Datum value, int maxdd)
 {
   Npoint *np = DatumGetNpointP(value);
-  char *rid = int8_out(np->rid);
+  char *rid = int64_out(np->rid);
   char *pos = float8_out(np->pos, maxdd);
   size_t len = strlen(rid) + strlen(pos) + 10; // Npoint(,) + end NULL
   char *result = palloc(len);
@@ -598,7 +603,7 @@ npoint_as_hexwkb(const Npoint *np, uint8_t variant, size_t *size_out)
  * @csqlfn #Npoint_constructor()
  */
 Npoint *
-npoint_make(int64 rid, double pos)
+npoint_make(int64_t rid, double pos)
 {
   /* Ensure the validity of the arguments */
   if (! ensure_route_exists(rid) || ! ensure_valid_position(pos))
@@ -615,7 +620,7 @@ npoint_make(int64 rid, double pos)
  * identifier and a position
  */
 void
-npoint_set(int64 rid, double pos, Npoint *np)
+npoint_set(int64_t rid, double pos, Npoint *np)
 {
   assert(route_exists(rid)); assert(pos >=0 && pos <= 1);
   /* Note: zero-fill is required here, just as in heap tuples */
@@ -634,7 +639,7 @@ npoint_set(int64 rid, double pos, Npoint *np)
  * @csqlfn #Nsegment_constructor()
  */
 Nsegment *
-nsegment_make(int64 rid, double pos1, double pos2)
+nsegment_make(int64_t rid, double pos1, double pos2)
 {
   /* Ensure the validity of the arguments */
   if (! ensure_route_exists(rid) || ! ensure_valid_position(pos1) ||
@@ -652,7 +657,7 @@ nsegment_make(int64 rid, double pos1, double pos2)
  * route identifier and two positions
  */
 void
-nsegment_set(int64 rid, double pos1, double pos2, Nsegment *ns)
+nsegment_set(int64_t rid, double pos1, double pos2, Nsegment *ns)
 {
   assert(route_exists(rid));
   assert(pos1 >= 0 && pos1 <= 1 && pos2 >= 0 && pos2 <= 1);
@@ -807,14 +812,14 @@ npoint_timestamptz_to_stbox(const Npoint *np, TimestampTz t)
  * @brief Return in the last argument a spatiotemporal box constructed from a
  * network point and a timestamptz span
  * @param[in] np Network point
- * @param[in] s Timestamptz span
+ * @param[in] sp Timestamptz span
  * @param[out] box Spatiotemporal box
  */
 bool
-npoint_tstzspan_set_stbox(const Npoint *np, const Span *s, STBox *box)
+npoint_tstzspan_set_stbox(const Npoint *np, const Span *sp, STBox *box)
 {
   npoint_set_stbox(np, box);
-  memcpy(&box->period, s, sizeof(Span));
+  memcpy(&box->period, sp, sizeof(Span));
   MEOS_FLAGS_SET_T(box->flags, true);
   return true;
 }
@@ -824,15 +829,15 @@ npoint_tstzspan_set_stbox(const Npoint *np, const Span *s, STBox *box)
  * @brief Return a spatiotemporal box constructed from a network point and a
  * timestamptz
  * @param[in] np Network point
- * @param[in] s Timestamptz span
+ * @param[in] sp Timestamptz span
  * @csqlfn #Npoint_tstzspan_to_stbox()
  */
 STBox *
-npoint_tstzspan_to_stbox(const Npoint *np, const Span *s)
+npoint_tstzspan_to_stbox(const Npoint *np, const Span *sp)
 {
-  VALIDATE_NOT_NULL(np, NULL); VALIDATE_TSTZSPAN(s, NULL);
+  VALIDATE_NOT_NULL(np, NULL); VALIDATE_TSTZSPAN(sp, NULL);
   STBox box;
-  if (! npoint_tstzspan_set_stbox(np, s, &box))
+  if (! npoint_tstzspan_set_stbox(np, sp, &box))
     return NULL;
   return stbox_copy(&box);
 }
@@ -852,9 +857,8 @@ npoint_to_geompoint(const Npoint *np)
 {
   /* Ensure the validity of the arguments */
   VALIDATE_NOT_NULL(np, NULL);
-  GSERIALIZED *line = route_geom(np->rid);
+  const GSERIALIZED *line = route_geom(np->rid);
   GSERIALIZED *result = line_interpolate_point(line, np->pos, 0);
-  pfree(line);
   return result;
 }
 
@@ -869,14 +873,11 @@ nsegment_to_geom(const Nsegment *ns)
 {
   /* Ensure the validity of the arguments */
   VALIDATE_NOT_NULL(ns, NULL);
-  GSERIALIZED *line = route_geom(ns->rid);
-  GSERIALIZED *result;
+  const GSERIALIZED *line = route_geom(ns->rid);
   if (fabs(ns->pos1 - ns->pos2) < MEOS_EPSILON)
-    result = line_interpolate_point(line, ns->pos1, 0);
+    return line_interpolate_point(line, ns->pos1, 0);
   else
-    result = line_substring(line, ns->pos1, ns->pos2);
-  pfree(line);
-  return result;
+    return line_substring(line, ns->pos1, ns->pos2);
 }
 
 /**
@@ -931,7 +932,7 @@ geom_to_nsegment(const GSERIALIZED *gs)
     pfree(points);
     return NULL;
   }
-  int64 rid = points[0]->rid;
+  int64_t rid = points[0]->rid;
   double minPos, maxPos;
   minPos = maxPos = points[0]->pos;
   for (int i = 1; i < npoints; i++)
@@ -966,18 +967,20 @@ npointarr_geom(Npoint **points, int count)
   int32_t srid = npoint_srid(points[0]);
   for (int i = 0; i < count; i++)
   {
-    GSERIALIZED *gsline = route_geom(points[i]->rid);
+    const GSERIALIZED *gsline = route_geom(points[i]->rid);
     assert(gserialized_get_srid(gsline) == srid);
     LWGEOM *line = lwgeom_from_gserialized(gsline);
     geoms[i] = lwgeom_line_interpolate_point(line, points[i]->pos, srid, 0);
-    pfree(gsline); pfree(line);
+    lwgeom_free(line);
   }
   int newcount;
   LWGEOM **newgeoms = lwpointarr_remove_duplicates(geoms, count, &newcount);
+  // for (int j = newcount; j < count; j++)
+    // lwgeom_free(newgeoms[j]);
   LWGEOM *geom = lwpointarr_make_trajectory(newgeoms, newcount, STEP);
   GSERIALIZED *result = geo_serialize(geom);
-  pfree(newgeoms); pfree(geom);
-  pfree_array((void **) geoms, count);
+  lwgeom_free(geom);
+  /* Cannot pfree(geoms); pfree(newgeoms);  */
   return result;
 }
 
@@ -995,14 +998,13 @@ nsegmentarr_geom(Nsegment **segments, int count)
   GSERIALIZED **geoms = palloc(sizeof(GSERIALIZED *) * count);
   for (int i = 0; i < count; i++)
   {
-    GSERIALIZED *line = route_geom(segments[i]->rid);
+    const GSERIALIZED *line = route_geom(segments[i]->rid);
     if (segments[i]->pos1 == 0 && segments[i]->pos2 == 1)
       geoms[i] = geo_copy(line);
     else if (segments[i]->pos1 == segments[i]->pos2)
       geoms[i] = line_interpolate_point(line, segments[i]->pos1, 0);
     else
       geoms[i] = line_substring(line, segments[i]->pos1, segments[i]->pos2);
-    pfree(line);
   }
   GSERIALIZED *result = geom_array_union(geoms, count);
   pfree_array((void **) geoms, count);
@@ -1024,7 +1026,7 @@ npoint_round(const Npoint *np, int maxdd)
   /* Ensure the validity of the arguments */
   VALIDATE_NOT_NULL(np, NULL);
   /* Set precision of position */
-  double pos = float_round(np->pos, maxdd);
+  double pos = float8_round(np->pos, maxdd);
   return npoint_make(np->rid, pos);
 }
 
@@ -1051,8 +1053,8 @@ nsegment_round(const Nsegment *ns, int maxdd)
 {
   VALIDATE_NOT_NULL(ns, NULL);
   /* Set precision of positions */
-  double pos1 = float_round(ns->pos1, maxdd);
-  double pos2 = float_round(ns->pos2, maxdd);
+  double pos1 = float8_round(ns->pos1, maxdd);
+  double pos2 = float8_round(ns->pos2, maxdd);
   return nsegment_make(ns->rid, pos1, pos2);
 }
 
@@ -1066,7 +1068,7 @@ nsegment_round(const Nsegment *ns, int maxdd)
  * @param[in] np Network point
  * @csqlfn #Npoint_route()
  */
-int64
+int64_t
 npoint_route(const Npoint *np)
 {
   /* Ensure the validity of the arguments */
@@ -1095,7 +1097,7 @@ npoint_position(const Npoint *np)
  * @param[in] ns Network segment
  * @csqlfn #Nsegment_route()
  */
-int64
+int64_t
 nsegment_route(const Nsegment *ns)
 {
   /* Ensure the validity of the arguments */
@@ -1392,19 +1394,23 @@ nsegment_ge(const Nsegment *ns1, const Nsegment *ns2)
  * @brief Return the 32-bit hash value of a network point
  * @param[in] np Network point
  */
-uint32
+uint32_t
 npoint_hash(const Npoint *np)
 {
   /* Ensure the validity of the arguments */
   VALIDATE_NOT_NULL(np, INT_MAX);
 
   /* Compute hashes of value and position */
-  uint32 rid_hash = pg_hashint8(np->rid);
-  uint32 pos_hash = pg_hashfloat8(np->pos);
+  uint32_t rid_hash = int64_hash(np->rid);
+  uint32_t pos_hash = float8_hash(np->pos);
 
   /* Merge hashes of value and position */
-  uint32 result = rid_hash;
-  result = (result << 1) | (result >> 31);
+  uint32_t result = rid_hash;
+#if POSTGRESQL_VERSION_NUMBER >= 150000
+  result = pg_rotate_left32(result, 1);
+#else
+  result =  (result << 1) | (result >> 31);
+#endif
   result ^= pos_hash;
   return result;
 }
@@ -1415,20 +1421,20 @@ npoint_hash(const Npoint *np)
  * @param[in] np Network point
  * @param[in] seed Seed
  */
-uint64
-npoint_hash_extended(const Npoint *np, uint64 seed)
+uint64_t
+npoint_hash_extended(const Npoint *np, uint64_t seed)
 {
   /* Ensure the validity of the arguments */
   VALIDATE_NOT_NULL(np, LONG_MAX);
 
   /* Compute hashes of value and position */
-  uint64 rid_hash = pg_hashint8extended(np->rid, seed);
-  uint64 pos_hash = pg_hashfloat8extended(np->pos, seed);
+  uint64_t rid_hash = int64_hash_extended(np->rid, seed);
+  uint64_t pos_hash = float8_hash_extended(np->pos, seed);
 
   /* Merge hashes of value and position */
-  uint64 result = rid_hash;
-  result = (result << 1) | (result >> 31);
+  uint64_t result = rid_hash;
   result ^= pos_hash;
+  result = ROTATE_HIGH_AND_LOW_32BITS(result);
   return result;
 }
 

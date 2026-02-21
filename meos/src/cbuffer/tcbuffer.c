@@ -397,6 +397,7 @@ tcbufferinst_make(const TInstant *inst1, const TInstant *inst2)
 }
 
 /**
+ * @ingroup meos_internal_cbuffer_constructor
  * @brief Return a temporal circular buffer from a temporal point and a
  * temporal float
  * @note This function is called after the synchronization done in function
@@ -417,6 +418,7 @@ tcbufferseq_make(const TSequence *seq1, const TSequence *seq2)
 }
 
 /**
+ * @ingroup meos_internal_cbuffer_constructor
  * @brief Return a temporal circular buffer from a temporal point and a
  * temporal float
  * @note This function is called after the synchronization done in function
@@ -688,7 +690,7 @@ Temporal *
 tgeometry_to_tcbuffer(const Temporal *temp)
 {
   /* Ensure the validity of the arguments */
-  VALIDATE_TGEOMETRY(temp, NULL);
+  VALIDATE_TGEO(temp, NULL);
 
   assert(temptype_subtype(temp->subtype));
   switch (temp->subtype)
@@ -758,7 +760,7 @@ tcbuffer_value_n(const Temporal *temp, int n, Cbuffer **result)
 
 /**
  * @ingroup meos_cbuffer_accessor
- * @brief Return the array of copies of base values of a temporal circular buffer
+ * @brief Return an array of copies of base values of a temporal circular buffer
  * @param[in] temp Temporal value
  * @param[out] count Number of values in the output array
  * @csqlfn #Temporal_valueset()
@@ -808,9 +810,12 @@ tcbufferseq_members(const TSequence *seq, bool point)
   meosType basetype = point ? T_GEOMETRY : T_FLOAT8;
   datumarr_sort(values, seq->count, basetype);
   int count = datumarr_remove_duplicates(values, seq->count, basetype);
-  /* Free the duplicate values that have been found */
-  for (int i = count; i < seq->count; i++)
-    pfree(DatumGetPointer(values[i]));
+  if (point)
+  {
+    /* Free the duplicate values that have been found */
+    for (int i = count; i < seq->count; i++)
+      pfree(DatumGetPointer(values[i]));
+  }
   return set_make_free(values, count, basetype, ORDER_NO);
 }
 
@@ -865,7 +870,7 @@ tcbuffer_members(const Temporal *temp, bool point)
 
 /**
  * @ingroup meos_cbuffer_accessor
- * @brief Return the array of points or radius of a temporal circular buffer
+ * @brief Return the set of points or radius of a temporal circular buffer
  * @csqlfn #Tcbuffer_points()
  */
 inline Set *
@@ -876,8 +881,8 @@ tcbuffer_points(const Temporal *temp)
 
 /**
  * @ingroup meos_cbuffer_accessor
- * @brief Return the array of radii of a temporal circular buffer
- * @csqlfn #Tcbuffer_points()
+ * @brief Return the set of radii of a temporal circular buffer
+ * @csqlfn #Tcbuffer_radius()
  */
 inline Set *
 tcbuffer_radius(const Temporal *temp)
@@ -1012,10 +1017,14 @@ tcbuffer_restrict_stbox(const Temporal *temp, const STBox *box,
   Temporal *tpoint = tcbuffer_to_tgeompoint(temp);
   Temporal *tfloat = tcbuffer_to_tfloat(temp);
   Temporal *tpoint_rest = tgeo_restrict_stbox(tpoint, box, NULL, atfunc);
+  pfree(tpoint);
   if (! tpoint_rest)
+  {
+    pfree(tfloat);
     return NULL;
+  }
   Temporal *result = tcbuffer_make(tpoint_rest, tfloat);
-  pfree(tpoint); pfree(tfloat); pfree(tpoint_rest);
+  pfree(tfloat); pfree(tpoint_rest);
   return result;
 }
 

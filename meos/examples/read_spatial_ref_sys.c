@@ -45,15 +45,14 @@
 #include <meos.h>
 #include <meos_geo.h>
 
-#define maxprojlen  512
-#define spibufferlen 512
+#define MAX_PROJ_LEN  512
 
 /*****************************************************************************
  * Definitions for reading the spatial_ref_sys.csv file
  *****************************************************************************/
 
 /* Maximum length in characters of a header record in the input CSV file */
-#define MAX_LENGTH_HEADER 1024
+#define MAX_LEN_HEADER 1024
 /* Location of the spatial_ref_sys.csv file */
 #define SPATIAL_REF_SYS "/usr/local/share/spatial_ref_sys.csv"
 
@@ -74,7 +73,7 @@ typedef struct
 static PjStrs
 GetProjStringsSPI(int32_t srid)
 {
-  char header_buffer[MAX_LENGTH_HEADER];
+  char header_buffer[MAX_LEN_HEADER];
   char auth_name[256];
   int32_t auth_srid;
   char proj4text[2048];
@@ -102,7 +101,7 @@ GetProjStringsSPI(int32_t srid)
   {
     /* Read each line from the file */
     int read = fscanf(file, "%255[^,^\n],%d,%2047[^,^\n],%2047[^\n]\n",
-            auth_name, &auth_srid, proj4text, srtext);
+      auth_name, &auth_srid, proj4text, srtext);
     if (ferror(file))
     {
       printf("Error reading the spatial_ref_sys.csv file");
@@ -112,8 +111,8 @@ GetProjStringsSPI(int32_t srid)
     /* Ignore the records with NULL values */
     if (read == 4 && auth_srid == srid)
     {
-      char tmp[maxprojlen];
-      snprintf(tmp, maxprojlen, "%s:%d", auth_name, auth_srid);
+      char tmp[MAX_PROJ_LEN];
+      snprintf(tmp, MAX_PROJ_LEN, "%s:%d", auth_name, auth_srid);
       strs.authtext = strdup(tmp);
       strs.proj4text = strdup(proj4text);
       strs.srtext = strdup(srtext);

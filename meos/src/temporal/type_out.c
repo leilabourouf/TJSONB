@@ -40,6 +40,7 @@
 #if POSTGRESQL_VERSION_NUMBER >= 160000
   #include "varatt.h"
 #endif
+#include "utils/varlena.h"
 /* PostGIS */
 #include <liblwgeom.h>
 #include <liblwgeom_internal.h>
@@ -49,7 +50,6 @@
 #include <meos_internal.h>
 #include <meos_internal_geo.h>
 #include <meos_geo.h>
-#include "temporal/postgres_types.h"
 #include "temporal/set.h"
 #include "temporal/span.h"
 #include "temporal/spanset.h"
@@ -58,6 +58,9 @@
 #include "geo/stbox.h"
 #if CBUFFER
   #include "cbuffer/cbuffer.h"
+#endif
+#if JSON
+  #include <utils/jsonb.h>
 #endif
 #if NPOINT
   #include "npoint/tnpoint.h"
@@ -68,6 +71,9 @@
 #if RGEO
   #include "rgeo/trgeo_all.h"
 #endif
+
+#include <utils/numeric.h>
+#include <pgtypes.h>
 
 #define MEOS_WKT_BOOL_SIZE sizeof("false")
 #define MEOS_WKT_INT4_SIZE sizeof("+2147483647")
@@ -89,23 +95,6 @@ size_t lwgeom_to_wkb_size(const LWGEOM *geom, uint8_t variant);
  *****************************************************************************/
 
 /**
- * @ingroup meos_base_types
- * @brief Return the string representation of a text value
- * @param[in] txt Text
- */
-char *
-text_out(const text *txt)
-{
-  assert(txt);
-  char *str = text2cstring(txt);
-  size_t size = strlen(str) + 4;
-  char *result = palloc(size);
-  snprintf(result, size, "\"%s\"", str);
-  pfree(str);
-  return result;
-}
-
-/**
  * @brief Return the string representation of a base value
  * @return On error return @p NULL
  */
@@ -123,9 +112,9 @@ basetype_out(Datum value, meosType type, int maxdd)
     case T_BOOL:
       return bool_out(DatumGetBool(value));
     case T_INT4:
-      return int4_out(DatumGetInt32(value));
+      return int32_out(DatumGetInt32(value));
     case T_INT8:
-      return int8_out(DatumGetInt64(value));
+      return int64_out(DatumGetInt64(value));
     case T_FLOAT8:
       return float8_out(DatumGetFloat8(value), maxdd);
     case T_TEXT:
@@ -145,6 +134,10 @@ basetype_out(Datum value, meosType type, int maxdd)
 #if CBUFFER
     case T_CBUFFER:
       return cbuffer_out(DatumGetCbufferP(value), maxdd);
+#endif
+#if JSON
+    case T_JSONB:
+      return pg_jsonb_out(DatumGetJsonbP(value));
 #endif
 #if NPOINT
     case T_NPOINT:
@@ -202,11 +195,30 @@ double_as_mfjson_sb(stringbuffer_t *sb, double d, int precision)
 static void
 text_as_mfjson_sb(stringbuffer_t *sb, const text *txt)
 {
-  char *str = text2cstring(txt);
+  char *str = pg_text_to_cstring(txt);
   stringbuffer_aprintf(sb, "\"%s\"", str);
   pfree(str);
   return;
 }
+
+#if JSON
+/**
+ * @brief Write into the buffer a JSONB value in the MF-JSON representation
+ */
+void 
+jsonb_as_mfjson_sb(stringbuffer_t *sb, const Jsonb *jb)
+{
+  /*
+   * JsonbToCString expects a non-const JsonbContainer*, but we know it doesn't
+   * modify the content, so we safely cast away const.
+   */
+  char *str = JsonbToCString(NULL, (JsonbContainer *) &jb->root, 1024);
+
+  /* Append raw JSON */
+  stringbuffer_append(sb, str);
+  pfree(str);
+}
+#endif /* JSON */
 
 /**
  * @brief Write into the buffer a coordinate array in the MF-JSON
@@ -289,7 +301,7 @@ static bool
 temporal_base_as_mfjson_sb(stringbuffer_t *sb, Datum value, meosType temptype,
   int precision)
 {
-  assert(alphanum_temptype(temptype));
+  assert(talphanum_temptype(temptype));
   switch (temptype)
   {
     case T_TBOOL:
@@ -312,6 +324,11 @@ temporal_base_as_mfjson_sb(stringbuffer_t *sb, Datum value, meosType temptype,
       stringbuffer_aprintf(sb, "%s,", str);
       break;
     }
+#if JSON
+    case T_TJSONB:
+      jsonb_as_mfjson_sb(sb, DatumGetJsonbP(value));
+      break;
+#endif
     default: /* Error! */
       meos_error(ERROR, MEOS_ERR_MFJSON_OUTPUT,
         "Unknown temporal type in MFJSON output: %s",
@@ -352,14 +369,14 @@ srs_as_mfjson_sb(stringbuffer_t *sb, const char *srs)
  * @brief Write into the buffer a tstzspan in the MF-JSON representation
  */
 static void
-tstzspan_as_mfjson_sb(stringbuffer_t *sb, const Span *s)
+tstzspan_as_mfjson_sb(stringbuffer_t *sb, const Span *sp)
 {
   stringbuffer_append_len(sb, "\"period\":{\"begin\":", 18);
-  datetimes_as_mfjson_sb(sb, DatumGetTimestampTz(s->lower));
+  datetimes_as_mfjson_sb(sb, DatumGetTimestampTz(sp->lower));
   stringbuffer_append_len(sb, ",\"end\":", 7);
-  datetimes_as_mfjson_sb(sb, DatumGetTimestampTz(s->upper));
+  datetimes_as_mfjson_sb(sb, DatumGetTimestampTz(sp->upper));
   stringbuffer_aprintf(sb, ",\"lower_inc\":%s,\"upper_inc\":%s},",
-    s->lower_inc ? "true" : "false", s->upper_inc ? "true" : "false");
+    sp->lower_inc ? "true" : "false", sp->upper_inc ? "true" : "false");
   return;
 }
 
@@ -431,6 +448,7 @@ bbox_as_mfjson_sb(stringbuffer_t *sb, meosType temptype, const bboxunion *box,
   {
     case T_TBOOL:
     case T_TTEXT:
+    case T_TJSONB:    
       tstzspan_as_mfjson_sb(sb, (Span *) box);
       break;
     case T_TINT:
@@ -483,10 +501,15 @@ temptype_as_mfjson_sb(stringbuffer_t *sb, meosType temptype)
     case T_TGEOGRAPHY:
       stringbuffer_append_len(sb, "{\"type\":\"MovingGeometry\",", 25);
       break;
+#if JSON
+    case T_TJSONB:
+      stringbuffer_append_len(sb, "{\"type\":\"MovingJsonb\",", 22);
+      break;
 #if POSE
     case T_TPOSE:
       stringbuffer_append_len(sb, "{\"type\":\"MovingPose\",", 21);
       break;
+#endif
 #endif
 #if RGEO
     case T_TRGEOMETRY:
@@ -621,7 +644,7 @@ tsequence_as_mfjson_sb(stringbuffer_t *sb, const TSequence *seq,
       /* Do not repeat the crs for the composing geometries */
       char *str = geo_as_geojson(gs, 0, precision, NULL);
       stringbuffer_aprintf(sb, "%s", str);
-      // pfree(str);
+      pfree(str);
     }
 #if POSE
     else if (inst->temptype == T_TPOSE)
@@ -832,10 +855,10 @@ temporal_as_mfjson(const Temporal *temp, bool with_bbox, int flags,
  * (for little- vs big-endian), WKB_EXTENDED (for the SRID), etc.
  * In addition, additional flags are needed for interpolation, etc.
  *
- * - For set and span types, the representation depends on the base type (int4, float8, ...).
+ * - For set and span types, the representation depends on the base type (int4, double, ...).
  * - For box types, the representation depends on the existing dimensions (X, Z, T).
  * - For temporal types, the binary representation depends on the subtype
- *   (instant, sequence, ...) and the basetype (int4, float8, text, ...).
+ *   (instant, sequence, ...) and the basetype (int4, double, text, ...).
  *****************************************************************************/
 
 /*****************************************************************************
@@ -891,6 +914,26 @@ cbuffer_to_wkb_size(const Cbuffer *cb, uint8_t variant, bool component)
   return size;
 }
 #endif /* CBUFFER */
+
+#if JSON
+/**
+ * @brief Return the size in bytes of a JSONB value in the Well-Known
+ * Binary (WKB) representation
+ */
+static size_t
+jsonb_to_wkb_size(const Jsonb *jb, bool component)
+{
+  size_t size = 0;
+  if (! component)
+  {
+    /* Endian flag */
+    size += MEOS_WKB_BYTE_SIZE;
+  }
+  /* size as an int8_t + size of the varlena  */
+  size += MEOS_WKB_INT8_SIZE + VARSIZE_ANY_EXHDR(jb);
+  return size;
+}
+#endif /* JSON */
 
 #if NPOINT
 /**
@@ -964,6 +1007,10 @@ base_to_wkb_size(Datum value, meosType basetype, uint8_t variant)
     case T_CBUFFER:
       return cbuffer_to_wkb_size(DatumGetCbufferP(value), variant, true);
 #endif /* CBUFFER */
+#if JSON
+    case T_JSONB:
+      return jsonb_to_wkb_size(DatumGetJsonbP(value), true);
+#endif /* JSON */
 #if NPOINT
     case T_NPOINT:
       return npoint_to_wkb_size(DatumGetNpointP(value), variant, true);
@@ -1006,7 +1053,7 @@ set_to_wkb_size(const Set *set, uint8_t variant)
  * representation
  */
 size_t
-span_to_wkb_size(const Span *s, bool component)
+span_to_wkb_size(const Span *sp, bool component)
 {
   size_t size = 0;
   if (! component)
@@ -1015,7 +1062,7 @@ span_to_wkb_size(const Span *s, bool component)
   /* spantype + bounds flag + basetype values */
   size += MEOS_WKB_INT2_SIZE + MEOS_WKB_BYTE_SIZE +
     /* Only the second parameter is used for spans */
-    base_to_wkb_size(0, s->basetype, 0) * 2;
+    base_to_wkb_size(0, sp->basetype, 0) * 2;
   return size;
 }
 
@@ -1090,7 +1137,7 @@ stbox_to_wkb_size(const STBox *box, uint8_t variant)
  * in the Well-Known Binary (WKB) representation
  */
 static size_t
-tinstarr_to_wkb_size(const TInstant **instants, int count, uint8_t variant)
+tinstarr_to_wkb_size(TInstant **instants, int count, uint8_t variant)
 {
   size_t result = 0;
   meosType basetype = temptype_basetype(instants[0]->temptype);
@@ -1118,7 +1165,7 @@ tinstant_to_wkb_size(const TInstant *inst, uint8_t variant)
       spatial_wkb_needs_srid(tspatial_srid((Temporal *) inst), variant))
     result += MEOS_WKB_INT4_SIZE;
   /* TInstant */
-  result += tinstarr_to_wkb_size(&inst, 1, variant);
+  result += tinstarr_to_wkb_size((TInstant **) &inst, 1, variant);
   return result;
 }
 
@@ -1139,7 +1186,7 @@ tsequence_to_wkb_size(const TSequence *seq, uint8_t variant)
   result += MEOS_WKB_INT4_SIZE + MEOS_WKB_BYTE_SIZE;
   const TInstant **instants = tsequence_insts_p(seq);
   /* Include the TInstant array */
-  result += tinstarr_to_wkb_size(instants, seq->count, variant);
+  result += tinstarr_to_wkb_size((TInstant **) instants, seq->count, variant);
   pfree(instants);
   return result;
 }
@@ -1163,7 +1210,8 @@ tsequenceset_to_wkb_size(const TSequenceSet *ss, uint8_t variant)
   result += ss->count * (MEOS_WKB_INT4_SIZE + MEOS_WKB_BYTE_SIZE);
   /* Include all the instants of all the sequences */
   const TInstant **instants = tsequenceset_insts_p(ss);
-  result += tinstarr_to_wkb_size(instants, ss->totalcount, variant);
+  result += tinstarr_to_wkb_size((TInstant **) instants, ss->totalcount,
+    variant);
   pfree(instants);
   return result;
 }
@@ -1219,6 +1267,10 @@ datum_to_wkb_size(Datum value, meosType type, uint8_t variant)
   if (type == T_CBUFFER)
     return cbuffer_to_wkb_size(DatumGetCbufferP(value), variant, false);
 #endif /* CBUFFER */
+#if JSON
+  if (type == T_JSONB)
+    return jsonb_to_wkb_size(DatumGetJsonbP(value), variant);
+#endif /* JSON */
 #if NPOINT
   if (type == T_NPOINT)
     return npoint_to_wkb_size(DatumGetNpointP(value), variant, false);
@@ -1347,10 +1399,10 @@ bool_to_wkb_buf(bool b, uint8_t *buf, uint8_t variant)
  * representation
  */
 static uint8_t *
-uint8_to_wkb_buf(const uint8_t i, uint8_t *buf, uint8_t variant)
+uint8_to_wkb_buf(uint8_t i, uint8_t *buf, uint8_t variant)
 {
-  return typed_value_to_wkb_buf(&i, sizeof(int8), MEOS_WKB_BYTE_SIZE,
-                                "int8", buf, variant);
+  return typed_value_to_wkb_buf(&i, sizeof(int8_t), MEOS_WKB_BYTE_SIZE,
+                                "int8_t", buf, variant);
 }
 
 /**
@@ -1358,10 +1410,10 @@ uint8_to_wkb_buf(const uint8_t i, uint8_t *buf, uint8_t variant)
  * representation
  */
 static uint8_t *
-int16_to_wkb_buf(const int16 i, uint8_t *buf, uint8_t variant)
+int16_to_wkb_buf(int16_t i, uint8_t *buf, uint8_t variant)
 {
-  return typed_value_to_wkb_buf(&i, sizeof(int16), MEOS_WKB_INT2_SIZE,
-                                "int16", buf, variant);
+  return typed_value_to_wkb_buf(&i, sizeof(int16_t), MEOS_WKB_INT2_SIZE,
+    "int16_t", buf, variant);
 }
 
 /**
@@ -1369,21 +1421,21 @@ int16_to_wkb_buf(const int16 i, uint8_t *buf, uint8_t variant)
  * representation
  */
 uint8_t *
-int32_to_wkb_buf(const int i, uint8_t *buf, uint8_t variant)
+int32_to_wkb_buf(int i, uint8_t *buf, uint8_t variant)
 {
   return typed_value_to_wkb_buf(&i, sizeof(int), MEOS_WKB_INT4_SIZE,
-                                "int32", buf, variant);
+    "int32_t", buf, variant);
 }
 
 /**
- * @brief Write into the buffer the int8 in the Well-Known Binary (WKB)
+ * @brief Write into the buffer the int8_t in the Well-Known Binary (WKB)
  * representation
  */
 uint8_t *
-int64_to_wkb_buf(const int64 i, uint8_t *buf, uint8_t variant)
+int64_to_wkb_buf(int64_t i, uint8_t *buf, uint8_t variant)
 {
-  return typed_value_to_wkb_buf(&i, sizeof(int64), MEOS_WKB_INT8_SIZE,
-                                "int64", buf, variant);
+  return typed_value_to_wkb_buf(&i, sizeof(int64_t), MEOS_WKB_INT8_SIZE,
+    "int64_t", buf, variant);
 }
 
 /**
@@ -1398,7 +1450,7 @@ double_to_wkb_buf(const double d, uint8_t *buf, uint8_t variant)
 }
 
 /**
- * @brief Write into the buffer the TimestampTz (aka int64) in the Well-Known
+ * @brief Write into the buffer the TimestampTz (aka int64_t) in the Well-Known
  * Binary (WKB) representation
  */
 uint8_t *
@@ -1409,7 +1461,7 @@ date_to_wkb_buf(const DateADT d, uint8_t *buf, uint8_t variant)
 }
 
 /**
- * @brief Write into the buffer the TimestampTz (aka int64) in the Well-Known
+ * @brief Write into the buffer the TimestampTz (aka int64_t) in the Well-Known
  * Binary (WKB) representation
  */
 uint8_t *
@@ -1431,7 +1483,7 @@ text_to_wkb_buf(const text *txt, uint8_t *buf, uint8_t variant)
 
   /*
    * Get the text data directly from the varlena structure.
-   * This avoids the memory allocation of text2cstring.
+   * This avoids the memory allocation of pg_text_to_cstring.
    */
   size_t size = VARSIZE_ANY_EXHDR(txt);
   char *str = VARDATA(txt);
@@ -1478,7 +1530,7 @@ geo_to_wkb_buf(const GSERIALIZED *gs, uint8_t *buf, uint8_t variant)
 /**
  * @brief Write into the buffer a component circular buffer in the Well-Known 
  * Binary (WKB) representation
- * @details SRID (int32), coordinates of a 2D point and radius (3 doubles)
+ * @details SRID (int32_t), coordinates of a 2D point and radius (3 doubles)
  */
 static uint8_t *
 cbuffer_to_wkb_buf(const Cbuffer *cb, uint8_t *buf, uint8_t variant,
@@ -1505,6 +1557,28 @@ cbuffer_to_wkb_buf(const Cbuffer *cb, uint8_t *buf, uint8_t variant,
   return buf;
 }
 #endif /* CBUFFER */
+
+#if JSON
+/**
+ * @brief Write into the buffer a JSONB value in the Well-Known Binary (WKB)
+ * representation
+ */
+static uint8_t *
+jsonb_to_wkb_buf(const Jsonb *jb, uint8_t *buf, uint8_t variant)
+{
+  /* raw JSONB payload, without the 4-byte header */
+  uint8_t *raw = (uint8_t *) VARDATA_ANY(jb);  // cast away const
+  size_t size = VARSIZE_ANY_EXHDR(jb);
+
+  /* first write the length */
+  buf = int64_to_wkb_buf((int64_t) size, buf, variant);
+
+  /* then the actual JSONB bytes */
+  buf = bytes_to_wkb_buf(raw, size, buf, variant);
+
+  return buf;
+}
+#endif /* JSON */
 
 #if NPOINT
 /**
@@ -1577,7 +1651,7 @@ pose_flags_to_wkb_buf(const Pose *pose, uint8_t *buf, uint8_t variant)
 /**
  * @brief Write into the buffer a component pose in the Well-Known Binary (WKB)
  * representation
- * @details SRID (int32, if any), 2D: 3 doubles, 3D: 7 doubles
+ * @details SRID (int32_t, if any), 2D: 3 doubles, 3D: 7 doubles
  */
 static uint8_t *
 pose_to_wkb_buf(const Pose *pose, uint8_t *buf, uint8_t variant,
@@ -1649,6 +1723,11 @@ base_to_wkb_buf(Datum value, meosType basetype, uint8_t *buf,
       buf = cbuffer_to_wkb_buf(DatumGetCbufferP(value), buf, variant, true);
       break;
 #endif /* CBUFFER */
+#if JSON
+    case T_JSONB:
+      buf = jsonb_to_wkb_buf(DatumGetJsonbP(value), buf, variant);
+      break;
+#endif /* JSON */
 #if NPOINT
     case T_NPOINT:
       buf = npoint_to_wkb_buf(DatumGetNpointP(value), buf, variant, true);
@@ -1702,8 +1781,8 @@ set_flags_to_wkb_buf(const Set *set, uint8_t *buf, uint8_t variant)
  * representation
  * @details The output is as follows
  * - Endian byte
- * - Ordered set type: @p int16
- * - Number of values: @p int32
+ * - Ordered set type: @p int16_t
+ * - Number of values: @p int32_t
  * - Values
  */
 static uint8_t *
@@ -1764,35 +1843,35 @@ bounds_to_wkb_buf(bool lower_inc, bool upper_inc, uint8_t *buf, uint8_t variant)
  * Well-Known Binary (WKB) representation
  */
 static uint8_t *
-lower_upper_to_wkb_buf(const Span *s, uint8_t *buf, uint8_t variant)
+lower_upper_to_wkb_buf(const Span *sp, uint8_t *buf, uint8_t variant)
 {
-  assert(span_basetype(s->basetype));
-  switch (s->basetype)
+  assert(span_basetype(sp->basetype));
+  switch (sp->basetype)
   {
     case T_INT4:
-      buf = int32_to_wkb_buf(DatumGetInt32(s->lower), buf, variant);
-      buf = int32_to_wkb_buf(DatumGetInt32(s->upper), buf, variant);
+      buf = int32_to_wkb_buf(DatumGetInt32(sp->lower), buf, variant);
+      buf = int32_to_wkb_buf(DatumGetInt32(sp->upper), buf, variant);
       break;
     case T_INT8:
-      buf = int64_to_wkb_buf(DatumGetInt64(s->lower), buf, variant);
-      buf = int64_to_wkb_buf(DatumGetInt64(s->upper), buf, variant);
+      buf = int64_to_wkb_buf(DatumGetInt64(sp->lower), buf, variant);
+      buf = int64_to_wkb_buf(DatumGetInt64(sp->upper), buf, variant);
       break;
     case T_FLOAT8:
-      buf = double_to_wkb_buf(DatumGetFloat8(s->lower), buf, variant);
-      buf = double_to_wkb_buf(DatumGetFloat8(s->upper), buf, variant);
+      buf = double_to_wkb_buf(DatumGetFloat8(sp->lower), buf, variant);
+      buf = double_to_wkb_buf(DatumGetFloat8(sp->upper), buf, variant);
       break;
     case T_DATE:
-      buf = date_to_wkb_buf(DatumGetDateADT(s->lower), buf, variant);
-      buf = date_to_wkb_buf(DatumGetDateADT(s->upper), buf, variant);
+      buf = date_to_wkb_buf(DatumGetDateADT(sp->lower), buf, variant);
+      buf = date_to_wkb_buf(DatumGetDateADT(sp->upper), buf, variant);
       break;
     case T_TIMESTAMPTZ:
-      buf = timestamptz_to_wkb_buf(DatumGetTimestampTz(s->lower), buf, variant);
-      buf = timestamptz_to_wkb_buf(DatumGetTimestampTz(s->upper), buf, variant);
+      buf = timestamptz_to_wkb_buf(DatumGetTimestampTz(sp->lower), buf, variant);
+      buf = timestamptz_to_wkb_buf(DatumGetTimestampTz(sp->upper), buf, variant);
       break;
     default: /* Error! */
       meos_error(ERROR, MEOS_ERR_WKB_OUTPUT,
         "Unknown span base type in WKB output: %s",
-        meostype_name(s->basetype));
+        meostype_name(sp->basetype));
       return NULL;
   }
   return buf;
@@ -1802,17 +1881,17 @@ lower_upper_to_wkb_buf(const Span *s, uint8_t *buf, uint8_t variant)
  * @brief Write into the buffer a span that is a component of a span set
  * in the Well-Known Binary (WKB) representation
  * @details The output is as follows
- * - Basetype @p int16
+ * - Basetype @p int16_t
  * - Bounds byte stating whether the bounds are inclusive
  * - Two base type values
  */
 static uint8_t *
-span_to_wkb_buf_iter(const Span *s, uint8_t *buf, uint8_t variant)
+span_to_wkb_buf_iter(const Span *sp, uint8_t *buf, uint8_t variant)
 {
   /* Write the span bounds */
-  buf = bounds_to_wkb_buf(s->lower_inc, s->upper_inc, buf, variant);
+  buf = bounds_to_wkb_buf(sp->lower_inc, sp->upper_inc, buf, variant);
   /* Write the base values */
-  buf = lower_upper_to_wkb_buf(s, buf, variant);
+  buf = lower_upper_to_wkb_buf(sp, buf, variant);
   return buf;
 }
 
@@ -1821,20 +1900,20 @@ span_to_wkb_buf_iter(const Span *s, uint8_t *buf, uint8_t variant)
  * in the Well-Known Binary (WKB) representation
  * @details The output is as follows
  * - Endian byte (if not a component)
- * - Basetype @p int16
+ * - Basetype @p int16_t
  * - Bounds byte stating whether the bounds are inclusive
  * - Two base type values
  */
 uint8_t *
-span_to_wkb_buf(const Span *s, uint8_t *buf, uint8_t variant, bool component)
+span_to_wkb_buf(const Span *sp, uint8_t *buf, uint8_t variant, bool component)
 {
   if (! component)
     /* Write the endian flag (byte) */
     buf = endian_to_wkb_buf(buf, variant);
   /* Write the span type */
-  buf = int16_to_wkb_buf(s->spantype, buf, variant);
+  buf = int16_to_wkb_buf(sp->spantype, buf, variant);
   /* Write the span bounds and values */
-  buf = span_to_wkb_buf_iter(s, buf, variant);
+  buf = span_to_wkb_buf_iter(sp, buf, variant);
   return buf;
 }
 
@@ -1845,8 +1924,8 @@ span_to_wkb_buf(const Span *s, uint8_t *buf, uint8_t variant, bool component)
  * representation
  * @details The output is as follows
  * - Endian byte
- * - Basetype @p int16
- * - Number of periods @p int32
+ * - Basetype @p int16_t
+ * - Number of periods @p int32_t
  * - Spans
  */
 static uint8_t *
@@ -1958,7 +2037,7 @@ stbox_flags_to_wkb_buf(const STBox *box, uint8_t *buf, uint8_t variant)
  * - Endian byte
  * - Flag byte stating whether the X, Z, and time dimensions are present,
  *   whether the box is geodetic and whether an SRID is needed
- * - Output the SRID (@p int32) if there is an X dimension and if the SRID
+ * - Output the SRID (@p int32_t) if there is an X dimension and if the SRID
  *   is needed, the 4 or 6 doubles for the value dimension if there are X and
  *   Z dimensions, and the 2 timestamps for the time dimension if there is a
  *   time dimension.
@@ -2209,6 +2288,10 @@ datum_to_wkb_buf(Datum value, meosType type, uint8_t *buf, uint8_t variant)
   else if (type == T_CBUFFER)
     buf = cbuffer_to_wkb_buf(DatumGetCbufferP(value), buf, variant, false);
 #endif /* CBUFFER */
+#if JSON
+  else if (type == T_JSONB)
+    buf = jsonb_to_wkb_buf(DatumGetJsonbP(value), buf, variant);
+#endif /* JSON */
 #if NPOINT
   else if (type == T_NPOINT)
     buf = npoint_to_wkb_buf(DatumGetNpointP(value), buf, variant,
@@ -2299,7 +2382,8 @@ datum_as_wkb(Datum value, meosType type, uint8_t variant, size_t *size_out)
     buf++;
   }
 
-  /* The buffer pointer should now land at the end of the allocated buffer space. Let's check. */
+  /* The buffer pointer should now land at the end of the allocated buffer
+     space. Let's check. */
   if (buf_size != (size_t) (buf - wkb_out))
   {
     meos_error(ERROR, MEOS_ERR_WKB_OUTPUT,
@@ -2371,17 +2455,17 @@ set_as_hexwkb(const Set *s, uint8_t variant, size_t *size_out)
 /**
  * @ingroup meos_setspan_inout
  * @brief Return the Well-Known Binary (WKB) representation of a span
- * @param[in] s Span
+ * @param[in] sp Span
  * @param[in] variant Output variant
  * @param[out] size_out Size of the output
  * @csqlfn #Span_send(), #Span_as_wkb()
  */
 uint8_t *
-span_as_wkb(const Span *s, uint8_t variant, size_t *size_out)
+span_as_wkb(const Span *sp, uint8_t variant, size_t *size_out)
 {
   /* Ensure the validity of the arguments */
-  VALIDATE_NOT_NULL(s, NULL); VALIDATE_NOT_NULL(size_out, NULL);
-  return datum_as_wkb(PointerGetDatum(s), s->spantype, variant, size_out);
+  VALIDATE_NOT_NULL(sp, NULL); VALIDATE_NOT_NULL(size_out, NULL);
+  return datum_as_wkb(PointerGetDatum(sp), sp->spantype, variant, size_out);
 }
 
 #if MEOS
@@ -2389,17 +2473,17 @@ span_as_wkb(const Span *s, uint8_t variant, size_t *size_out)
  * @ingroup meos_setspan_inout
  * @brief Return the ASCII hex-encoded Well-Known Binary (HexWKB)
  * representation of a span
- * @param[in] s Span
+ * @param[in] sp Span
  * @param[in] variant Output variant
  * @param[out] size_out Size of the output
  * @csqlfn #Span_as_hexwkb()
  */
 char *
-span_as_hexwkb(const Span *s, uint8_t variant, size_t *size_out)
+span_as_hexwkb(const Span *sp, uint8_t variant, size_t *size_out)
 {
   /* Ensure the validity of the arguments */
-  VALIDATE_NOT_NULL(s, NULL); VALIDATE_NOT_NULL(size_out, NULL);
-  return (char *) datum_as_wkb(PointerGetDatum(s), s->spantype,
+  VALIDATE_NOT_NULL(sp, NULL); VALIDATE_NOT_NULL(size_out, NULL);
+  return (char *) datum_as_wkb(PointerGetDatum(sp), sp->spantype,
     variant | (uint8_t) WKB_HEX, size_out);
 }
 #endif /* MEOS */

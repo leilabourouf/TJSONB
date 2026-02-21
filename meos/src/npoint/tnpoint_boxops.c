@@ -34,6 +34,9 @@
 
 #include "npoint/tnpoint_boxops.h"
 
+/* PostgreSQL */
+#include <postgres.h>
+#include <utils/timestamp.h>
 /* MEOS */
 #include <meos.h>
 #include <meos_internal.h>
@@ -69,7 +72,7 @@ tnpointinst_set_stbox(const TInstant *inst, STBox *box)
  * @param[out] box Spatiotemporal box
  */
 void
-tnpointinstarr_step_set_stbox(const TInstant **instants, int count, STBox *box)
+tnpointinstarr_step_set_stbox(TInstant **instants, int count, STBox *box)
 {
   tnpointinst_set_stbox(instants[0], box);
   for (int i = 1; i < count; i++)
@@ -89,11 +92,10 @@ tnpointinstarr_step_set_stbox(const TInstant **instants, int count, STBox *box)
  * @param[out] box Spatiotemporal box
  */
 void
-tnpointinstarr_linear_set_stbox(const TInstant **instants, int count,
-  STBox *box)
+tnpointinstarr_linear_set_stbox(TInstant **instants, int count, STBox *box)
 {
   Npoint *np = DatumGetNpointP(tinstant_value_p(instants[0]));
-  int64 rid = np->rid;
+  int64_t rid = np->rid;
   double posmin, posmax;
   posmin = posmax = np->pos;
   TimestampTz tmin = instants[0]->t, tmax = instants[count - 1]->t;
@@ -104,14 +106,13 @@ tnpointinstarr_linear_set_stbox(const TInstant **instants, int count,
     posmax = Max(posmax, np->pos);
   }
 
-  GSERIALIZED *line = route_geom(rid);
-  GSERIALIZED *gs = (posmin == 0 && posmax == 1) ? line :
+  const GSERIALIZED *line = route_geom(rid);
+  GSERIALIZED *gs = (posmin == 0 && posmax == 1) ? geo_copy(line) :
     line_substring(line, posmin, posmax);
   geo_set_stbox(gs, box);
   span_set(TimestampTzGetDatum(tmin), TimestampTzGetDatum(tmax),
     true, true, T_TIMESTAMPTZ, T_TSTZSPAN, &box->period);
   MEOS_FLAGS_SET_T(box->flags, true);
-  pfree(line);
   if (posmin != 0 || posmax != 1)
     pfree(gs);
   return;
@@ -126,8 +127,8 @@ tnpointinstarr_linear_set_stbox(const TInstant **instants, int count,
  * @param[out] box Spatiotemporal box
  */
 void
-tnpointinstarr_set_stbox(const TInstant **instants, int count,
-  interpType interp, STBox *box)
+tnpointinstarr_set_stbox(TInstant **instants, int count, interpType interp,
+  STBox *box)
 {
   if (interp == LINEAR)
     tnpointinstarr_linear_set_stbox(instants, count, box);
@@ -154,17 +155,16 @@ tnpointseq_expand_stbox(const TSequence *seq, const TInstant *inst)
     const TInstant *last = TSEQUENCE_INST_N(seq, seq->count - 1);
     Npoint *np1 = DatumGetNpointP(tinstant_value_p(last));
     Npoint *np2 = DatumGetNpointP(tinstant_value_p(inst));
-    int64 rid = np1->rid;
+    int64_t rid = np1->rid;
     double posmin = Min(np1->pos, np2->pos);
     double posmax = Min(np1->pos, np2->pos);
-    GSERIALIZED *line = route_geom(rid);
-    GSERIALIZED *gs = (posmin == 0 && posmax == 1) ? line :
+    const GSERIALIZED *line = route_geom(rid);
+    GSERIALIZED *gs = (posmin == 0 && posmax == 1) ? geo_copy(line) :
       line_substring(line, posmin, posmax);
     geo_set_stbox(gs, &box);
     span_set(TimestampTzGetDatum(last->t), TimestampTzGetDatum(inst->t),
       true, true, T_TIMESTAMPTZ, T_TSTZSPAN, &box.period);
     MEOS_FLAGS_SET_T(box.flags, true);
-    pfree(line);
     if (posmin != 0 || posmax != 1)
       pfree(gs);
   }

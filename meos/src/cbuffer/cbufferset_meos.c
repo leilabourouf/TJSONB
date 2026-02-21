@@ -94,7 +94,7 @@ cbufferset_out(const Set *s, int maxdd)
  * @csqlfn #Set_constructor()
  */
 Set *
-cbufferset_make(const Cbuffer **values, int count)
+cbufferset_make(Cbuffer **values, int count)
 {
   /* Ensure the validity of the arguments */
   VALIDATE_NOT_NULL(values, NULL);
@@ -165,7 +165,7 @@ cbufferset_value_n(const Set *s, int n, Cbuffer **result)
 
 /**
  * @ingroup meos_cbuffer_set_accessor
- * @brief Return the array of copies of the values of a circular buffer set
+ * @brief Return an array of copies of the values of a circular buffer set
  * @param[in] s Set
  * @return On error return @p NULL
  * @csqlfn #Set_values()
@@ -194,7 +194,7 @@ cbufferset_values(const Set *s)
  * @csqlfn #Contains_set_value()
  */
 bool
-contains_set_cbuffer(const Set *s, Cbuffer *cb)
+contains_set_cbuffer(const Set *s, const Cbuffer *cb)
 {
   /* Ensure the validity of the arguments */
   if (! ensure_valid_cbufferset_cbuffer(s, cb))

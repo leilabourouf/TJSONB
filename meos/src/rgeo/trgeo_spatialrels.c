@@ -64,7 +64,7 @@
  * @param[in] param Parameter
  * @param[in] func Spatial relationship function to be called
  * @param[in] numparam Number of parameters of the functions
- * @param[in] invert True if the arguments should be inverted
+ * @param[in] invert True if the arguments must be inverted
  * @return On error return -1
  */
 int
@@ -103,7 +103,7 @@ spatialrel_trgeo_trav_geo(const Temporal *temp, const GSERIALIZED *gs,
  * @param[in] param Parameter
  * @param[in] func PostGIS function to be called
  * @param[in] numparam Number of parameters of the functions
- * @param[in] invert True if the arguments should be inverted
+ * @param[in] invert True if the arguments must be inverted
  * @return On error return -1
  */
 static int
@@ -494,7 +494,9 @@ etouches_trgeo_geo(const Temporal *temp, const GSERIALIZED *gs)
   /* Bounding box test */
   STBox *box1 = tspatial_to_stbox(temp);
   STBox *box2 = geo_stbox(gs);
-  if (! overlaps_stbox_stbox(box1, box2))
+  bool over = overlaps_stbox_stbox(box1, box2);
+  pfree(box1); pfree(box2);
+  if (! over)
     return 0;
 
   datum_func2 func = geo_intersects_fn_geo(temp->flags, gs->gflags);
@@ -536,7 +538,9 @@ atouches_trgeo_geo(const Temporal *temp, const GSERIALIZED *gs)
   /* Bounding box test */
   STBox *box1 = tspatial_to_stbox(temp);
   STBox *box2 = geo_stbox(gs);
-  if (! overlaps_stbox_stbox(box1, box2))
+  bool over = overlaps_stbox_stbox(box1, box2);
+  pfree(box1); pfree(box2);
+  if (! over)
     return 0;
 
   GSERIALIZED *geobound = geom_boundary(gs);

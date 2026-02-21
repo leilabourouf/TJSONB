@@ -63,15 +63,15 @@ tcbuffer_cbuffer_distance_turnpt(Datum start, Datum end, Datum value,
 {
   /* Extract the two CBUFFER values */
   Cbuffer *ca1 = DatumGetCbufferP(start);
-  const GSERIALIZED *gs1 = cbuffer_point(ca1);
+  const GSERIALIZED *gs1 = cbuffer_point_p(ca1);
   const POINT2D *p1 = GSERIALIZED_POINT2D_P(gs1);
   Cbuffer *ca2 = DatumGetCbufferP(end);
-  const GSERIALIZED *gs2 = cbuffer_point(ca2);
+  const GSERIALIZED *gs2 = cbuffer_point_p(ca2);
   const POINT2D *p2 = GSERIALIZED_POINT2D_P(gs2);
 
   /* Extract the circular buffer value */
   Cbuffer *cb = DatumGetCbufferP(value);
-  const GSERIALIZED *gs = cbuffer_point(cb);
+  const GSERIALIZED *gs = cbuffer_point_p(cb);
   const POINT2D *p = GSERIALIZED_POINT2D_P(gs);
 
   /* Extract coordinates and radius at the two instants */
@@ -348,9 +348,8 @@ tdistance_tcbuffer_cbuffer(const Temporal *temp, const Cbuffer *cb)
   LiftedFunctionInfo lfinfo;
   memset(&lfinfo, 0, sizeof(LiftedFunctionInfo));
   lfinfo.func = (varfunc) datum_cbuffer_distance;
-  lfinfo.numparam = 0;
-  lfinfo.argtype[0] = temp->temptype;
-  lfinfo.argtype[1] = temptype_basetype(temp->temptype);
+  lfinfo.argtype[0] = T_TCBUFFER;
+  lfinfo.argtype[1] = T_CBUFFER;
   lfinfo.restype = T_TFLOAT;
   lfinfo.reslinear = MEOS_FLAGS_LINEAR_INTERP(temp->flags);
   lfinfo.invert = INVERT_NO;
@@ -397,9 +396,8 @@ tdistance_tcbuffer_tcbuffer(const Temporal *temp1, const Temporal *temp2)
   LiftedFunctionInfo lfinfo;
   memset(&lfinfo, 0, sizeof(LiftedFunctionInfo));
   lfinfo.func = (varfunc) datum_cbuffer_distance;
-  lfinfo.numparam = 0;
-  lfinfo.argtype[0] = temp1->temptype;
-  lfinfo.argtype[1] = temp2->temptype;
+  lfinfo.argtype[0] = T_TCBUFFER;
+  lfinfo.argtype[1] = T_TCBUFFER;
   lfinfo.restype = T_TFLOAT;
   lfinfo.reslinear = MEOS_FLAGS_LINEAR_INTERP(temp1->flags) &&
     MEOS_FLAGS_LINEAR_INTERP(temp2->flags);
@@ -486,12 +484,13 @@ nai_tcbuffer_tcbuffer(const Temporal *temp1, const Temporal *temp2)
   if (dist == NULL)
     return NULL;
 
-  const TInstant *min = temporal_min_instant((const Temporal *) dist);
-  pfree(dist);
+  const TInstant *min = temporal_min_inst_p((const Temporal *) dist);
   /* The closest point may be at an exclusive bound. */
   Datum value;
   temporal_value_at_timestamptz(temp1, min->t, false, &value);
-  return tinstant_make_free(value, temp1->temptype, min->t);
+  TInstant *result = tinstant_make_free(value, temp1->temptype, min->t);
+  pfree(dist);
+  return result;
 }
 
 /*****************************************************************************
@@ -561,7 +560,7 @@ nad_tcbuffer_stbox(const Temporal *temp, const STBox *box)
   GSERIALIZED *trav = tcbuffer_trav_area(temp, false);
   GSERIALIZED *geo = stbox_geo(box);
   double result = geom_distance2d(trav, geo);
-  pfree(trav);
+  pfree(trav); pfree(geo);
   return result;
 }
 
@@ -603,7 +602,9 @@ nad_tcbuffer_tcbuffer(const Temporal *temp1, const Temporal *temp2)
   Temporal *dist = tdistance_tcbuffer_tcbuffer(temp1, temp2);
   if (dist == NULL)
     return -1.0;
-  return DatumGetFloat8(temporal_min_value(dist));
+  double result = DatumGetFloat8(temporal_min_value(dist));
+  pfree(dist);
+  return result;
 }
 
 /*****************************************************************************

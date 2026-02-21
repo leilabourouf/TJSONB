@@ -36,13 +36,10 @@
 
 /* C */
 #include <stdbool.h>
-/* PostgreSQL */
-#include <postgres.h>
 /* MEOS */
 #include <meos.h>
 #include <meos_pose.h>
 #include <meos_internal.h>
-#include "geo/stbox.h"
 
 /*****************************************************************************
  * Validity macros
@@ -122,7 +119,7 @@ extern Temporal *trgeo_append_tinstant(Temporal *temp, const TInstant *inst, int
 extern Temporal *trgeo_append_tsequence(Temporal *temp, const TSequence *seq, bool expand);
 extern Temporal *trgeo_delete_timestamptz(const Temporal *temp, TimestampTz t, bool connect);
 extern Temporal *trgeo_delete_tstzset(const Temporal *temp, const Set *s, bool connect);
-extern Temporal *trgeo_delete_tstzspan(const Temporal *temp, const Span *s, bool connect);
+extern Temporal *trgeo_delete_tstzspan(const Temporal *temp, const Span *sp, bool connect);
 extern Temporal *trgeo_delete_tstzspanset(const Temporal *temp, const SpanSet *ss, bool connect);
 extern Temporal *trgeo_round(const Temporal *temp, int maxdd);
 extern Temporal *trgeo_set_interp(const Temporal *temp, interpType interp);
@@ -132,12 +129,15 @@ extern TInstant *trgeo_to_tinstant(const Temporal *temp);
  * Restriction functions
  *****************************************************************************/
 
+extern Temporal *trgeo_after_timestamptz(const Temporal *temp, TimestampTz t, bool strict);
+extern Temporal *trgeo_before_timestamptz(const Temporal *temp, TimestampTz t, bool strict);
+
 extern Temporal *trgeo_restrict_value(const Temporal *temp, Datum value, bool atfunc);
 extern Temporal *trgeo_restrict_values(const Temporal *temp, const Set *s, bool atfunc);
 
 extern Temporal *trgeo_restrict_timestamptz(const Temporal *temp, TimestampTz t, bool atfunc);
 extern Temporal *trgeo_restrict_tstzset(const Temporal *temp, const Set *s, bool atfunc);
-extern Temporal *trgeo_restrict_tstzspan(const Temporal *temp, const Span *s, bool atfunc);
+extern Temporal *trgeo_restrict_tstzspan(const Temporal *temp, const Span *sp, bool atfunc);
 extern Temporal *trgeo_restrict_tstzspanset(const Temporal *temp, const SpanSet *ss, bool atfunc);
 
 // extern Temporal *trgeo_at_geom(const Temporal *temp, const GSERIALIZED *gs, const Span *zspan);

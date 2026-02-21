@@ -46,11 +46,11 @@ extern bool cbuffer_set_stbox(const Cbuffer *cb, STBox *box);
 extern void cbufferarr_set_stbox(const Datum *values, int count, STBox *box);
 extern bool cbuffer_timestamptz_set_stbox(const Cbuffer *cb, TimestampTz t,
   STBox *box);
-extern bool cbuffer_tstzspan_set_stbox(const Cbuffer *cb, const Span *s,
+extern bool cbuffer_tstzspan_set_stbox(const Cbuffer *cb, const Span *sp,
   STBox *box);
 
 extern void tcbufferinst_set_stbox(const TInstant *inst, STBox *box);
-extern void tcbufferinstarr_set_stbox(const TInstant **instants, int count,
+extern void tcbufferinstarr_set_stbox(TInstant **instants, int count,
   STBox *box);
 extern void tcbufferseq_expand_stbox(const TSequence *seq, const TInstant *inst);
 

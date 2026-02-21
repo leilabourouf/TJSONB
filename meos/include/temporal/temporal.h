@@ -51,12 +51,6 @@
 #define C_COLLATION_OID 950
 #define POSIX_COLLATION_OID 951
 
-#ifndef FMGR_H
-  /* To avoid including fmgr.h However this implies that the text values must
-   * be ALWAYS detoasted */
-  #define DatumGetTextP(X)      ((text *) DatumGetPointer(X)) // ((text *) PG_DETOAST_DATUM(X))
-#endif /* FMGR_H */
-
 /**
  * Floating point precision
  */
@@ -73,7 +67,14 @@
  */
 #define DIST_EPSILON    1.0e-06
 
-#define UNUSED          __attribute__((unused))
+/* only GCC supports the unused attribute */
+#if ! MEOS
+#ifdef __GNUC__
+#define UNUSED __attribute__((unused))
+#else
+#define UNUSED
+#endif
+#endif /* ! MEOS */
 
 /** Symbolic constants for lifting */
 #define DISCONTINUOUS   true
@@ -84,8 +85,9 @@
 #define ORDER_NO        false
 
 /** Symbolic constants for the output of string elements */
-#define QUOTES          true
-#define QUOTES_NO       false
+#define QUOTES_ESCAPE   2
+#define QUOTES          1
+#define QUOTES_NO       0
 
 /** Symbolic constants for the output of string elements */
 #define SPACES          true
@@ -169,12 +171,23 @@ typedef enum
   MINUS
 } SetOper;
 
+/** Enumeration for the comparison operations */
+typedef enum
+{
+  EQ,
+  NE,
+  LT,
+  LE,
+  GT,
+  GE
+} CompOper;
+
 /* PostgreSQL removed pg_atoi in version 15 */
 #if POSTGRESQL_VERSION_NUMBER >= 150000
-  extern int32 pg_strtoint32(const char *s);
+  extern int32_t pg_strtoint32(const char *s);
 #else
   /* To avoid including <utils/builtins.h> */
-  extern int32 pg_atoi(const char *s, int size, int c);
+  extern int32_t pg_atoi(const char *s, int size, int c);
 #endif /* POSTGRESQL_VERSION_NUMBER >= 150000 */
 
 /*****************************************************************************
@@ -359,20 +372,20 @@ typedef int (*tpfunc_temp)(Datum, Datum, Datum, Datum, Datum, TimestampTz,
 
 /* Parameter tests */
 
-extern bool ensure_has_X(meosType type, int16 flags);
-extern bool ensure_has_Z(meosType type, int16 flags);
-extern bool ensure_has_T(meosType type, int16 flags);
-extern bool ensure_has_not_Z(meosType type, int16 flags);
+extern bool ensure_has_X(meosType type, int16_t flags);
+extern bool ensure_has_Z(meosType type, int16_t flags);
+extern bool ensure_has_T(meosType type, int16_t flags);
+extern bool ensure_has_not_Z(meosType type, int16_t flags);
 extern bool ensure_not_null(void *ptr);
 extern bool ensure_one_not_null(void *ptr1, void *ptr2);
 extern bool ensure_one_true(bool hasshift, bool haswidth);
 extern bool ensure_valid_interp(meosType temptype, interpType interp);
 extern bool ensure_continuous(const Temporal *temp);
 extern bool ensure_same_interp(const Temporal *temp1, const Temporal *temp2);
-extern bool ensure_same_continuous_interp(int16 flags1, int16 flags2);
-extern bool ensure_linear_interp(int16 flags);
-extern bool ensure_nonlinear_interp(int16 flags);
-extern bool ensure_common_dimension(int16 flags1, int16 flags2);
+extern bool ensure_same_continuous_interp(int16_t flags1, int16_t flags2);
+extern bool ensure_linear_interp(int16_t flags);
+extern bool ensure_nonlinear_interp(int16_t flags);
+extern bool ensure_common_dimension(int16_t flags1, int16_t flags2);
 extern bool ensure_temporal_isof_type(const Temporal *temp, meosType type);
 extern bool ensure_temporal_isof_basetype(const Temporal *temp,
   meosType basetype);
@@ -381,7 +394,7 @@ extern bool ensure_temporal_isof_subtype(const Temporal *temp,
 extern bool ensure_same_temporal_type(const Temporal *temp1,
   const Temporal *temp2);
 
-extern bool ensure_valid_tnumber_numspan(const Temporal *temp, const Span *s);
+extern bool ensure_valid_tnumber_numspan(const Temporal *temp, const Span *sp);
 extern bool ensure_valid_tnumber_numspanset(const Temporal *temp,
   const SpanSet *ss);
 extern bool ensure_valid_tnumber_tbox(const Temporal *temp, const TBox *box);

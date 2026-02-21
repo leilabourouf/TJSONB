@@ -38,6 +38,7 @@
 #include <assert.h>
 /* PostgreSQL */
 #include <postgres.h>
+#include <pgtypes.h>
 #include <utils/timestamp.h>
 /* MEOS */
 #include <meos.h>
@@ -677,14 +678,14 @@ Temporal_app_tinst_transfn(PG_FUNCTION_ARGS)
   if (PG_NARGS() == 2 || PG_ARGISNULL(2))
   {
     /* Set default interpolation according to the base type */
-    meosType temptype = oid_type(get_fn_expr_argtype(fcinfo->flinfo, 1));
+    meosType temptype = oid_meostype(get_fn_expr_argtype(fcinfo->flinfo, 1));
     interp = temptype_continuous(temptype) ? LINEAR : STEP;
   }
   else
   {
     /* Input interpolation */
     text *interp_txt = PG_GETARG_TEXT_P(2);
-    char *interp_str = text2cstring(interp_txt);    
+    char *interp_str = pg_text_to_cstring(interp_txt);    
     interp = interptype_from_string(interp_str);
     pfree(interp_str);
   }
